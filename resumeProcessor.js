@@ -3,9 +3,44 @@
  */
 class ResumeProcessor {
     /**
-     * Normalizes a JSON Resume into a flat internal index with derived and computed fields.
-     * @param {Object} resumeData - The raw JSON resume following JSON Resume schema.
-     * @returns {Object} A flat object containing normalized and computed values.
+     * Text Normalization Utility
+     * - Lowercases text
+     * - Removes punctuation (replaces with space)
+     * - Standardizes whitespace
+     * - Expands abbreviations
+     */
+    static normalizeText(text) {
+        if (!text || typeof text !== 'string') return '';
+
+        let normalized = text.toLowerCase()
+            .replace(/[^\w\s]|_/g, ' ') // Strip punctuation
+            .replace(/\s+/g, ' ')       // Standardize whitespace
+            .trim();
+
+        // Abbreviation expansion dictionary
+        const abbreviations = {
+            "ml": "machine learning",
+            "ai": "artificial intelligence",
+            "js": "javascript",
+            "ts": "typescript",
+            "fe": "frontend",
+            "be": "backend",
+            "fs": "fullstack",
+            "ux": "user experience",
+            "ui": "user interface",
+            "aws": "amazon web services",
+            "gcp": "google cloud platform",
+            "db": "database",
+            "sdlc": "software development life cycle",
+            "qa": "quality assurance"
+        };
+
+        // Split, expand, and rejoin
+        return normalized.split(' ').map(word => abbreviations[word] || word).join(' ');
+    }
+
+    /**
+     * Normalizes a JSON Resume into a structured internal index.
      */
     static normalize(resumeData) {
         if (!resumeData) return {};
@@ -16,65 +51,38 @@ class ResumeProcessor {
         const location = basics.location || {};
         const profiles = basics.profiles || [];
 
-        // 1. Basic Fields
+        // 1. Identity
         const fullName = basics.name || "";
         const nameParts = fullName.split(' ');
-        const firstName = nameParts[0] || "";
-        const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+        let firstName = "", middleName = "", lastName = "";
 
-        // 2. Profile URLs
+        if (nameParts.length > 0) {
+            firstName = nameParts[0];
+            lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+            middleName = nameParts.length > 2 ? nameParts.slice(1, nameParts.length - 1).join(" ") : "";
+        }
+
+        const identity = {
+            first_name: firstName,
+            middle_name: middleName,
+            last_name: lastName,
+            full_name: fullName
+        };
+
+        // 2. Contact & Links
         const getProfile = (network) => {
-            const p = profiles.find(pf => pf.network.toLowerCase().includes(network.toLowerCase()));
+            const p = profiles.find(pf => this.normalizeText(pf.network).includes(network));
             return p ? p.url : "";
         };
 
-        // 3. Current Work Info
-        const currentWork = work[0] || {}; // Assuming first entry is most recent
-        const currentTitle = currentWork.position || basics.label || "";
-        const currentCompany = currentWork.name || "";
-
-        // 4. Total Years Experience (Compute)
-        const totalExperience = this.calculateExperience(work);
-
-        // 5. Skills String
-        const skillsString = skills.map(s => {
-            const keywords = s.keywords ? (Array.isArray(s.keywords) ? s.keywords.join(", ") : s.keywords) : "";
-            return s.name + (keywords ? `: ${keywords}` : "");
-        }).join("; ");
-
-        // 6. Summaries
-        const summaryLong = basics.summary || "";
-        let summaryShort = "";
-        if (summaryLong) {
-            const firstSentence = summaryLong.split(/[.!?]/)[0];
-            summaryShort = firstSentence ? firstSentence.trim() + "." : summaryLong;
-        }
-
-        // Create the internal flat index
-        const index = {
-            // Core Identity
-            full_name: fullName,
-            first_name: firstName,
-            last_name: lastName,
+        const contact = {
             email: basics.email || "",
-            phone: basics.phone || "",
+            phone: basics.phone ? basics.phone.replace(/[^\d+]/g, "") : "", // Keep only digits and +
+            linkedin: getProfile('linkedin'),
+            github: getProfile('github'),
+            portfolio: basics.url || "",
 
-            // Socials
-            linkedin_url: getProfile('linkedin'),
-            github_url: getProfile('github'),
-            portfolio_url: basics.url || "",
-
-            // Professional
-            current_title: currentTitle,
-            current_company: currentCompany,
-            total_years_experience: totalExperience.toString(),
-            skills_string: skillsString,
-
-            // Summaries
-            summary_short: summaryShort,
-            summary_long: summaryLong,
-
-            // Location
+            // Location included in contact for convenience
             address: location.address || "",
             city: location.city || "",
             state: location.region || "",
@@ -82,54 +90,106 @@ class ResumeProcessor {
             country: location.countryCode || ""
         };
 
-        // 7. Precompute Aliases
-        // This expands the index with common variations for easier matching
-        const aliases = {
-            "fname": index.first_name,
-            "lname": index.last_name,
-            "mobile": index.phone,
-            "cell": index.phone,
-            "contact": index.phone,
-            "website": index.portfolio_url,
-            "title": index.current_title,
-            "job_title": index.current_title,
-            "company": index.current_company,
-            "employer": index.current_company,
-            "years_exp": index.total_years_experience,
-            "experience": index.total_years_experience,
-            "linkedin": index.linkedin_url,
-            "github": index.github_url,
-            "street": index.address,
-            "zip": index.zip_code,
-            "region": index.state,
-            "fullname": index.full_name,
-            "current_role": index.current_title
-        };
-
-        return { ...index, ...aliases };
-    }
-
-    /**
-     * Calculates total years of experience from work history.
-     * @param {Array} work - Array of work history objects.
-     * @returns {number} Rounded total years of experience.
-     */
-    static calculateExperience(work) {
-        if (!work || work.length === 0) return 0;
-
+        // 3. Employment & Reverse Maps
+        const currentWork = work[0] || {};
         let totalMonths = 0;
+
+        const companyToDuration = {};
+        const titleToDuration = {};
+        const rolesByYear = {};
+
         work.forEach(job => {
             const start = new Date(job.startDate);
-            const end = job.endDate ? new Date(job.endDate) : new Date(); // Empty end date means current
+            const end = job.endDate ? new Date(job.endDate) : new Date();
 
             if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
                 const diffTime = Math.abs(end - start);
                 const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44));
                 totalMonths += diffMonths;
+
+                const normCompany = this.normalizeText(job.name);
+                const normTitle = this.normalizeText(job.position);
+
+                // Track durations
+                companyToDuration[normCompany] = (companyToDuration[normCompany] || 0) + diffMonths;
+                titleToDuration[normTitle] = (titleToDuration[normTitle] || 0) + diffMonths;
+
+                // Track roles by year
+                const startYear = start.getFullYear();
+                const endYear = end.getFullYear();
+                for (let y = startYear; y <= endYear; y++) {
+                    if (!rolesByYear[y]) rolesByYear[y] = [];
+                    if (!rolesByYear[y].includes(job.position)) {
+                        rolesByYear[y].push(job.position);
+                    }
+                }
             }
         });
 
-        return Math.round(totalMonths / 12);
+        const employment = {
+            current_role: currentWork.position || basics.label || "",
+            current_company: currentWork.name || "",
+            years_total: Math.round(totalMonths / 12),
+            roles_by_year: rolesByYear
+        };
+
+        // 4. Skills & Reverse Maps
+        const normalizedSkillSet = new Set();
+        const skillFrequency = {};
+        const skillToYears = {};
+        const skillCategories = {};
+
+        skills.forEach(skillCategory => {
+            const catName = this.normalizeText(skillCategory.name);
+            skillCategories[catName] = [];
+
+            const keywords = skillCategory.keywords || [skillCategory.name];
+
+            keywords.forEach(keyword => {
+                const normKeyword = this.normalizeText(keyword);
+                normalizedSkillSet.add(normKeyword);
+                skillCategories[catName].push(normKeyword);
+
+                // Estimate skill frequency/years based on overall employment
+                // In a perfect system, skills would map to specific jobs. 
+                // We'll approximate by assigning total experience to core skills for now.
+                skillFrequency[normKeyword] = (skillFrequency[normKeyword] || 0) + 1;
+                skillToYears[normKeyword] = employment.years_total;
+            });
+        });
+
+        const skillsData = {
+            normalized_skill_set: Array.from(normalizedSkillSet),
+            skill_frequency: skillFrequency,
+            skill_categories: skillCategories,
+            skills_string: Array.from(normalizedSkillSet).join(", ")
+        };
+
+        // Summaries
+        const summaryLong = basics.summary || "";
+        let summaryShort = "";
+        if (summaryLong) {
+            const firstSentence = summaryLong.split(/[.!?]/)[0];
+            summaryShort = firstSentence ? firstSentence.trim() + "." : summaryLong;
+        }
+
+        // Output Index
+        return {
+            identity: identity,
+            contact: contact,
+            employment: employment,
+            skills: skillsData,
+            summary: {
+                short: summaryShort,
+                long: summaryLong
+            },
+            education: resumeData.education || [],
+            reverse_maps: {
+                skill_to_years: skillToYears,
+                company_to_duration: companyToDuration,
+                title_to_duration: titleToDuration
+            }
+        };
     }
 }
 

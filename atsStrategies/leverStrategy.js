@@ -40,16 +40,16 @@ class LeverStrategy extends GenericStrategy {
         const nameAttr = (input.name || "").toLowerCase();
 
         // Lever commonly uses name attributes like 'name', 'email', 'phone', 'org'
-        if (nameAttr === 'name') return { value: data.full_name, confidence: 95 };
-        if (nameAttr === 'email') return { value: data.email, confidence: 95 };
-        if (nameAttr === 'phone') return { value: data.phone, confidence: 95 };
-        if (nameAttr === 'org') return { value: data.current_company, confidence: 90 };
+        if (nameAttr === 'name') return { value: data.identity.full_name, confidence: 95 };
+        if (nameAttr === 'email') return { value: data.contact.email, confidence: 95 };
+        if (nameAttr === 'phone') return { value: data.contact.phone, confidence: 95 };
+        if (nameAttr === 'org') return { value: data.employment.current_company, confidence: 90 };
 
         // URLs in lever are often formatted like urls[LinkedIn]
         if (nameAttr.includes('url')) {
-            if (nameAttr.includes('linkedin')) return { value: data.linkedin_url, confidence: 95 };
-            if (nameAttr.includes('github')) return { value: data.github_url, confidence: 95 };
-            if (nameAttr.includes('portfolio')) return { value: data.portfolio_url, confidence: 95 };
+            if (nameAttr.includes('linkedin')) return { value: data.contact.linkedin, confidence: 95 };
+            if (nameAttr.includes('github')) return { value: data.contact.github, confidence: 95 };
+            if (nameAttr.includes('portfolio')) return { value: data.contact.portfolio, confidence: 95 };
         }
 
         return null;

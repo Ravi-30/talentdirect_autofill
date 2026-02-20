@@ -8,20 +8,28 @@ class GenericStrategy {
 
         // Field Mapping Dictionary
         this.FIELD_MAPPING = {
-            "name": ["name", "fullname", "first_name", "last_name", "full_name"],
-            "email": ["email", "e-mail", "mail"],
-            "phone": ["phone", "tel", "mobile", "cell", "contact"],
-            "url": ["website", "url", "portfolio", "link"],
-            "location.address": ["address", "street"],
-            "location.city": ["city", "town"],
-            "location.postalCode": ["zip", "postal", "code"],
-            "location.region": ["state", "province", "region"],
-            "location.countryCode": ["country"],
-            "profiles.linkedin": ["linkedin"],
-            "profiles.github": ["github"],
-            "summary": ["summary", "about", "bio", "description"],
-            "label": ["title", "position", "role", "job_title", "current_title"]
+            "identity.first_name": ["first_name", "first name", "fname", "given name"],
+            "identity.last_name": ["last_name", "last name", "lname", "surname", "family name"],
+            "identity.full_name": ["name", "fullname", "full_name", "applicant name"],
+            "contact.email": ["email", "e-mail", "mail", "email address"],
+            "contact.phone": ["phone", "tel", "mobile", "cell", "contact", "phone number"],
+            "contact.portfolio": ["website", "url", "portfolio", "link", "personal website"],
+            "contact.address": ["address", "street", "address line 1"],
+            "contact.city": ["city", "town"],
+            "contact.zip_code": ["zip", "postal", "code", "zip code"],
+            "contact.state": ["state", "province", "region"],
+            "contact.country": ["country", "country format"],
+            "contact.linkedin": ["linkedin", "linkedin url", "linkedin profile"],
+            "contact.github": ["github", "github profile", "github url"],
+            "summary.short": ["summary", "about", "bio", "description"],
+            "employment.current_role": ["title", "position", "role", "job_title", "current role", "current title"],
+            "employment.current_company": ["company", "employer", "current company", "organization"],
+            "employment.years_total": ["total experience", "years experience", "total years"]
         };
+    }
+
+    getNestedValue(obj, path) {
+        return path.split('.').reduce((acc, part) => acc && acc[part], obj);
     }
 
     execute(normalizedData, aiEnabled) {
@@ -114,7 +122,11 @@ class GenericStrategy {
             aria_label: (input.getAttribute('aria-label') || "").toLowerCase(),
             label_text: this.getLabelText(input).toLowerCase(),
             nearby_text: this.getNearbyText(input).toLowerCase(),
-            input_type: (input.type || "text").toLowerCase()
+            input_type: (input.type || "text").toLowerCase(),
+            normalized_combined: (typeof ResumeProcessor !== 'undefined') ?
+                ResumeProcessor.normalizeText(
+                    `${input.name || ""} ${input.id || ""} ${this.getLabelText(input)} ${input.getAttribute('aria-label') || ""}`
+                ) : ""
         };
     }
 
@@ -174,40 +186,45 @@ class GenericStrategy {
 
     findValueForInput(input, normalizedData) {
         const features = this.extractFeatures(input);
+
+        // --- 1. Attempt Domain-Specific Dynamic Reverse Lookups ---
+        // E.g., "years of experience with javascript"
+        if (features.normalized_combined.includes("year") || features.normalized_combined.includes("experience")) {
+            if (normalizedData.reverse_maps) {
+                // Check skills first
+                for (const [skill, years] of Object.entries(normalizedData.reverse_maps.skill_to_years)) {
+                    if (features.normalized_combined.includes(skill)) {
+                        return { value: years.toString(), confidence: 95 };
+                    }
+                }
+                // Check titles/companies
+                for (const [company, months] of Object.entries(normalizedData.reverse_maps.company_to_duration)) {
+                    if (features.normalized_combined.includes(company)) {
+                        return { value: Math.round(months / 12).toString(), confidence: 90 };
+                    }
+                }
+                for (const [title, months] of Object.entries(normalizedData.reverse_maps.title_to_duration)) {
+                    if (features.normalized_combined.includes(title)) {
+                        return { value: Math.round(months / 12).toString(), confidence: 90 };
+                    }
+                }
+            }
+        }
+
+        // --- 2. Standard Heuristic Matching ---
         let bestMatch = { value: null, confidence: 0 };
 
         for (const [fieldKey, keywords] of Object.entries(this.FIELD_MAPPING)) {
             const confidence = this.calculateConfidence(features, keywords, fieldKey);
 
             if (confidence > bestMatch.confidence) {
-                const normalizedKey = fieldKey.replace('.', '_');
-                let value = normalizedData[normalizedKey];
-
-                if (!value) {
-                    if (fieldKey === 'location.address') value = normalizedData.address;
-                    if (fieldKey === 'location.region') value = normalizedData.state;
-                    if (fieldKey === 'location.postalCode') value = normalizedData.zip_code;
-                    if (fieldKey === 'profiles.linkedin') value = normalizedData.linkedin_url;
-                    if (fieldKey === 'profiles.github') value = normalizedData.github_url;
-                    if (fieldKey === 'url') value = normalizedData.portfolio_url;
-                    if (fieldKey === 'label') value = normalizedData.current_title;
-                    if (fieldKey === 'name') value = normalizedData.full_name;
-                }
+                const value = this.getNestedValue(normalizedData, fieldKey);
 
                 if (value) {
                     bestMatch = { value, confidence };
                 }
             }
         }
-
-        const normalizedKeys = Object.keys(normalizedData);
-        normalizedKeys.forEach(key => {
-            if (bestMatch.confidence > 70) return;
-            const confidence = this.calculateConfidence(features, [key], key);
-            if (confidence > bestMatch.confidence && confidence > 30) {
-                bestMatch = { value: normalizedData[key], confidence: confidence };
-            }
-        });
 
         return bestMatch.confidence > 0 ? bestMatch : null;
     }

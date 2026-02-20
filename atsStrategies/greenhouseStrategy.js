@@ -43,14 +43,14 @@ class GreenhouseStrategy extends GenericStrategy {
         const parentDiv = input.closest('div.field');
         const labelTxt = parentDiv ? (parentDiv.querySelector('label')?.innerText || "").toLowerCase() : "";
 
-        if (id.includes('first_name')) return { value: data.first_name, confidence: 95 };
-        if (id.includes('last_name')) return { value: data.last_name, confidence: 95 };
-        if (id.includes('email')) return { value: data.email, confidence: 95 };
-        if (id.includes('phone')) return { value: data.phone, confidence: 95 };
+        if (id.includes('first_name')) return { value: data.identity.first_name, confidence: 95 };
+        if (id.includes('last_name')) return { value: data.identity.last_name, confidence: 95 };
+        if (id.includes('email')) return { value: data.contact.email, confidence: 95 };
+        if (id.includes('phone')) return { value: data.contact.phone, confidence: 95 };
 
         // Specific checks based on common Greenhouse custom questions
-        if (labelTxt.includes("linkedin") || id.includes("linkedin")) return { value: data.linkedin_url, confidence: 90 };
-        if (labelTxt.includes("github") || labelTxt.includes("portfolio") || labelTxt.includes("website")) return { value: data.portfolio_url || data.github_url, confidence: 85 };
+        if (labelTxt.includes("linkedin") || id.includes("linkedin")) return { value: data.contact.linkedin, confidence: 90 };
+        if (labelTxt.includes("github") || labelTxt.includes("portfolio") || labelTxt.includes("website")) return { value: data.contact.portfolio || data.contact.github, confidence: 85 };
 
         return null; // Return null if not a highly matched specific Greenhouse field
     }

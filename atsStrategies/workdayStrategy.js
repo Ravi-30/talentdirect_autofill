@@ -43,13 +43,13 @@ class WorkdayStrategy extends GenericStrategy {
         if (!dataAutomationId) return null;
 
         // Common Workday data-automation-ids
-        if (dataAutomationId.includes('legalname-first')) return { value: data.first_name, confidence: 95 };
-        if (dataAutomationId.includes('legalname-last')) return { value: data.last_name, confidence: 95 };
-        if (dataAutomationId.includes('email')) return { value: data.email, confidence: 95 };
-        if (dataAutomationId.includes('phone-number')) return { value: data.phone, confidence: 95 };
-        if (dataAutomationId.includes('address-line1')) return { value: data.address, confidence: 95 };
-        if (dataAutomationId.includes('address-city')) return { value: data.city, confidence: 95 };
-        if (dataAutomationId.includes('address-postal-code')) return { value: data.zip_code, confidence: 95 };
+        if (dataAutomationId.includes('legalname-first')) return { value: data.identity.first_name, confidence: 95 };
+        if (dataAutomationId.includes('legalname-last')) return { value: data.identity.last_name, confidence: 95 };
+        if (dataAutomationId.includes('email')) return { value: data.contact.email, confidence: 95 };
+        if (dataAutomationId.includes('phone-number')) return { value: data.contact.phone, confidence: 95 };
+        if (dataAutomationId.includes('address-line1')) return { value: data.contact.address, confidence: 95 };
+        if (dataAutomationId.includes('address-city')) return { value: data.contact.city, confidence: 95 };
+        if (dataAutomationId.includes('address-postal-code')) return { value: data.contact.zip_code, confidence: 95 };
 
         return null;
     }
