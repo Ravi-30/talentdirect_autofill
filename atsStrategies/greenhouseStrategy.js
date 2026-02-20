@@ -55,3 +55,11 @@ class GreenhouseStrategy extends GenericStrategy {
         return null; // Return null if not a highly matched specific Greenhouse field
     }
 }
+
+// Register with Strategy Registry if available
+if (typeof ATSStrategyRegistry !== 'undefined') {
+    ATSStrategyRegistry.register(
+        (url) => url.includes('greenhouse.io'),
+        GreenhouseStrategy
+    );
+}

@@ -54,3 +54,11 @@ class WorkdayStrategy extends GenericStrategy {
         return null;
     }
 }
+
+// Register with Strategy Registry if available
+if (typeof ATSStrategyRegistry !== 'undefined') {
+    ATSStrategyRegistry.register(
+        (url, doc) => url.includes('workday.com') || url.includes('myworkdayjobs.com'),
+        WorkdayStrategy
+    );
+}

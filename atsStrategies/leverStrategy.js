@@ -55,3 +55,11 @@ class LeverStrategy extends GenericStrategy {
         return null;
     }
 }
+
+// Register with Strategy Registry if available
+if (typeof ATSStrategyRegistry !== 'undefined') {
+    ATSStrategyRegistry.register(
+        (url) => url.includes('lever.co'),
+        LeverStrategy
+    );
+}

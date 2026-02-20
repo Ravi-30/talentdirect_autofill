@@ -111,20 +111,8 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 function fillForm(normalizedData, aiEnabled, isManualTrigger = false) {
-    const hostname = window.location.hostname;
-    let strategy;
+    console.log("Detected URL:", window.location.href);
 
-    console.log("Detected Hostname:", hostname);
-
-    if (hostname.includes('greenhouse.io')) {
-        strategy = new GreenhouseStrategy();
-    } else if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) {
-        strategy = new WorkdayStrategy();
-    } else if (hostname.includes('lever.co')) {
-        strategy = new LeverStrategy();
-    } else {
-        strategy = new GenericStrategy();
-    }
-
+    const strategy = ATSStrategyRegistry.getStrategy(window.location.href, document);
     strategy.execute(normalizedData, aiEnabled);
 }

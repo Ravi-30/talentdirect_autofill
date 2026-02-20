@@ -36,6 +36,7 @@
         "https://jobs.lever.co/*"
       ],
       "js": [
+        "atsStrategies/strategyRegistry.js",
         "atsStrategies/genericStrategy.js",
         "atsStrategies/greenhouseStrategy.js",
         "atsStrategies/leverStrategy.js",
