@@ -21,10 +21,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep track of the current tab ID logic executes on 
     let activeTabId = null;
     let customAtsAnswers = {
-        Global: {},
+        Generic: {},
         Greenhouse: {},
         Lever: {},
-        Workday: {}
+        Workday: {},
+        SuccessFactors: {},
+        Adp: {},
+        Ashby: {},
+        SmartRecruiters: {},
+        Icims: {},
+        Jobvite: {},
+        Taleo: {},
+        Workable: {},
+        BambooHr: {},
+        Paycom: {},
+        Paychex: {},
+        Ultipro: {},
+        Linkedin: {},
+        Indeed: {},
+        Recruitee: {},
+        Teamtailor: {},
+        Personio: {},
+        OracleCloud: {},
+        ApplyToJob: {},
+        Brassring: {},
+        Rippling: {}
     };
 
     let savedProfiles = {};
