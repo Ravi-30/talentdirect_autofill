@@ -502,20 +502,65 @@
           <textarea id="summary" name="professional_summary"
             placeholder="Brief summary of your professional background"></textarea>
         </div>
-      </div>
-
-      <!-- SECTION 6: LinkedIn Profile -->
-      <div class="section">
-        <h2 class="section-title">Professional Profiles</h2>
 
         <div class="form-group">
-          <label for="linkedin">LinkedIn Profile URL</label>
-          <input type="url" id="linkedin" name="linkedin_url" placeholder="https://linkedin.com/in/yourprofile">
+          <label for="relevant_exp">Please use 3-4 sentences to describe your relevant experiences to highlight your
+            industrial projects and research record.</label>
+          <textarea id="relevant_exp" name="relevant_experiences" placeholder="Highlight your projects..."></textarea>
+        </div>
+      </div>
+
+      <!-- SECTION 7: Additional Information -->
+      <div class="section">
+        <h2 class="section-title">Additional Information</h2>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="gender">Gender</label>
+            <select id="gender" name="gender">
+              <option value="">Select gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Decline">I decline to self-identify</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="veteran">Veteran Status</label>
+            <select id="veteran" name="veteran_status">
+              <option value="">Select status</option>
+              <option value="Not a protected veteran">I am not a protected veteran</option>
+              <option value="Identify as one or more">I identify as one or more protected veterans</option>
+              <option value="Decline">I decline to self-identify</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="disability">Disability Status</label>
+            <select id="disability" name="disability_status">
+              <option value="">Select status</option>
+              <option value="Yes">Yes, I have a disability</option>
+              <option value="No">No, I do not have a disability</option>
+              <option value="Decline">I decline to self-identify</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="sponsorship">Will you now or in the future require sponsorship?</label>
+            <select id="sponsorship" name="sponsorship">
+              <option value="">Select answer</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-group">
-          <label for="github">GitHub Profile URL</label>
-          <input type="url" id="github" name="github_url" placeholder="https://github.com/yourusername">
+          <label for="available_start">When is the soonest you can start?</label>
+          <input type="text" id="available_start" name="start_date" placeholder="e.g. Within 2 weeks">
         </div>
       </div>
 

@@ -14,7 +14,8 @@ class LeverStrategy extends GenericStrategy {
         const inputs = document.querySelectorAll('input, select, textarea');
 
         inputs.forEach(input => {
-            if (input.type === 'hidden' || input.disabled || input.readOnly) return;
+            if (input.type === 'hidden' && !input.id && !input.name) return;
+            if (input.disabled || input.readOnly) return;
 
             let match = this.findLeverSpecificMatch(input, normalizedData);
 

@@ -22,13 +22,28 @@ class GenericStrategy {
             "contact.linkedin": ["linkedin", "linkedin url", "linkedin profile"],
             "contact.github": ["github", "github profile", "github url"],
             "summary.short": ["summary", "about", "bio", "description"],
+            "summary.professional_statement": ["describe your relevant experiences", "professional statement", "highlight your industrial projects", "research record"],
             "employment.current_role": ["title", "position", "role", "job_title", "current role", "current title"],
             "employment.current_company": ["company", "employer", "current company", "organization"],
-            "employment.years_total": ["total experience", "years experience", "total years"]
+            "employment.years_total": ["total experience", "years experience", "total years"],
+            // Dropdown specific / Additional fields
+            "education_flat.degree": ["degree", "level of education", "educational attainment"],
+            "education_flat.institution": ["school", "university", "college", "institution"],
+            "education_flat.major": ["major", "field of study", "specialization", "discipline"],
+            "education_flat.start_date": ["start date", "graduation date", "edu start"],
+            "education_flat.end_date": ["end date", "graduation date", "edu end"],
+            "identity.gender": ["gender", "sex"],
+            "identity.ethnicity": ["ethnicity", "race", "hispanic"],
+            "identity.hispanic_latino": ["hispanic", "latino"],
+            "identity.veteran_status": ["veteran", "military"],
+            "identity.disability_status": ["disability", "handicap"],
+            "identity.sponsorship_required": ["sponsorship", "visa", "work authorization", "authorized to work"],
+            "availability.start_date": ["start date", "availability", "soonest start", "available to start"]
         };
     }
 
     getNestedValue(obj, path) {
+        if (!obj || !path) return null;
         return path.split('.').reduce((acc, part) => acc && acc[part], obj);
     }
 
@@ -40,7 +55,13 @@ class GenericStrategy {
         let fillReport = [];
 
         inputs.forEach(input => {
-            if (input.type === 'hidden' || input.disabled || input.readOnly) return;
+            // Allow hidden fields if they have a name or id (likely state holders for custom dropdowns)
+            if (input.type === 'hidden' && !input.id && !input.name && !input.getAttribute('data-automation-id')) return;
+            if (input.disabled || input.readOnly) return;
+
+            // Skip radio/checkbox if they require specific handling in sub-strategies
+            if (input.type === 'radio' || input.type === 'checkbox') return;
+
             const match = this.findValueForInput(input, normalizedData);
 
             let status = 'unmatched';
@@ -83,7 +104,7 @@ class GenericStrategy {
             report: fillReport
         });
 
-        alert('AutoFill complete! Please check the side panel for a summary and review highlighted fields.');
+        console.log('AutoFill attempt complete.');
     }
 
     findCustomAnswer(input, hostname, customAtsAnswers) {
@@ -120,8 +141,8 @@ class GenericStrategy {
             id_attr: (input.id || "").toLowerCase(),
             placeholder: (input.placeholder || "").toLowerCase(),
             aria_label: (input.getAttribute('aria-label') || "").toLowerCase(),
-            label_text: this.getLabelText(input).toLowerCase(),
-            nearby_text: this.getNearbyText(input).toLowerCase(),
+            label_text: (this.getLabelText(input) || "").toLowerCase(),
+            nearby_text: (this.getNearbyText(input) || "").toLowerCase(),
             input_type: (input.type || "text").toLowerCase(),
             normalized_combined: (typeof ResumeProcessor !== 'undefined') ?
                 ResumeProcessor.normalizeText(
@@ -188,7 +209,6 @@ class GenericStrategy {
         const features = this.extractFeatures(input);
 
         // --- 1. Attempt Domain-Specific Dynamic Reverse Lookups ---
-        // E.g., "years of experience with javascript"
         if (features.normalized_combined.includes("year") || features.normalized_combined.includes("experience")) {
             if (normalizedData.reverse_maps) {
                 // Check skills first
@@ -230,6 +250,7 @@ class GenericStrategy {
     }
 
     getLabelText(input) {
+        if (!input) return '';
         if (input.parentElement && input.parentElement.tagName === 'LABEL') {
             return input.parentElement.innerText;
         }
@@ -246,6 +267,7 @@ class GenericStrategy {
     }
 
     getNearbyText(input) {
+        if (!input) return '';
         let container = input.parentElement;
         let iterations = 0;
         while (container && iterations < 2) {
@@ -260,25 +282,26 @@ class GenericStrategy {
     }
 
     setInputValue(input, value, highlightType = 'green') {
-        if (!value && highlightType !== 'red') return;
+        if (!input || (!value && highlightType !== 'red')) return;
 
         if (value) {
-            input.value = value;
-
             if (input.tagName === 'SELECT') {
-                for (let i = 0; i < input.options.length; i++) {
-                    if (input.options[i].text.toLowerCase().includes(value.toLowerCase()) ||
-                        input.options[i].value.toLowerCase().includes(value.toLowerCase())) {
-                        input.selectedIndex = i;
-                        break;
-                    }
-                }
+                this.setSelectValue(input, value);
+            } else {
+                input.value = value;
             }
 
-            ['input', 'change', 'blur'].forEach(eventType => {
+            // Dispatch a flurry of events to satisfy different frameworks (React, Vue, etc.)
+            ['input', 'change', 'blur', 'focus', 'click'].forEach(eventType => {
                 const event = new Event(eventType, { bubbles: true });
                 input.dispatchEvent(event);
             });
+
+            // Bonus: trigger React's internal onChange if possible
+            const tracker = input._valueTracker;
+            if (tracker) {
+                tracker.setValue(value);
+            }
         }
 
         const originalBg = input.style.backgroundColor;
@@ -298,6 +321,54 @@ class GenericStrategy {
                 input.style.backgroundColor = originalBg;
                 input.style.border = originalBorder;
             }, 3000);
+        }
+    }
+
+    /**
+     * Set value for a SELECT element using fuzzy matching on options
+     */
+    setSelectValue(select, value) {
+        if (!select || !value) return;
+
+        const normalize = (s) => String(s).toLowerCase().replace(/[^\w\s]/g, '').trim();
+        const val = normalize(value);
+
+        let bestOptionIndex = -1;
+        let highestConfidence = 0;
+
+        for (let i = 0; i < select.options.length; i++) {
+            const option = select.options[i];
+            const optText = normalize(option.text);
+            const optVal = normalize(option.value);
+
+            // 1. Perfect match (100)
+            if (optVal === val || optText === val) {
+                bestOptionIndex = i;
+                highestConfidence = 100;
+                break;
+            }
+
+            // 2. Starts with (90)
+            if (optText.startsWith(val) || val.startsWith(optText)) {
+                if (90 > highestConfidence) {
+                    bestOptionIndex = i;
+                    highestConfidence = 90;
+                }
+            }
+            // 3. Includes (70)
+            else if (optText.includes(val) || val.includes(optText)) {
+                if (70 > highestConfidence) {
+                    bestOptionIndex = i;
+                    highestConfidence = 70;
+                }
+            }
+        }
+
+        if (bestOptionIndex !== -1) {
+            select.selectedIndex = bestOptionIndex;
+        } else {
+            // Fallback: try setting value directly
+            select.value = value;
         }
     }
 

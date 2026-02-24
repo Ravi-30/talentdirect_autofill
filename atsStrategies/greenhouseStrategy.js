@@ -1,74 +1,120 @@
-/**
- * greenhouseStrategy.js
- * Strategy for Greenhouse application forms.
- */
 class GreenhouseStrategy extends GenericStrategy {
     constructor() {
         super();
-        this.CONFIDENCE_THRESHOLD = 60; // Lower threshold as Greenhouse structures are more predictable
+        this.CONFIDENCE_THRESHOLD = 60;
+        this.executed = false; // ✅ Prevent multiple popups
     }
 
     execute(normalizedData, aiEnabled) {
+        if (this.executed) {
+            console.log("GreenhouseStrategy already executed. Skipping...");
+            return;
+        }
+
+        if (!normalizedData) {
+            console.error("No resume data provided.");
+            return;
+        }
+
+        this.executed = true; // lock execution
+
         console.log("Executing GreenhouseStrategy...");
 
-        // Greenhouse specific targets, e.g., input[id^="job_application_"]
-        const inputs = document.querySelectorAll('input, select, textarea');
+        const inputs = document.querySelectorAll("input, select, textarea");
 
-        inputs.forEach(input => {
-            if (input.type === 'hidden' || input.disabled || input.readOnly) return;
+        inputs.forEach((input) => {
+            // Greenhouse often hides native selects; we should fill them even if they look hidden 
+            // but NOT if they are truly hidden inputs (type="hidden")
+            if (input.type === "hidden" && !input.id && !input.name) return;
+            if (input.disabled || input.readOnly) return;
 
             let match = this.findGreenhouseSpecificMatch(input, normalizedData);
 
-            // Fallback to generic matching if no specific match found
             if (!match || !match.value) {
                 match = this.findValueForInput(input, normalizedData);
             }
 
-            if (match && match.value) {
-                if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
-                    this.setInputValue(input, match.value);
-                } else {
-                    this.promptUserConfirmation(input, match.value, match.confidence);
-                }
-            } else if (aiEnabled) {
-                console.log("AI Enabled: Would attempt to fill unmatched field", input.name || input.id);
+            if (match && match.value && match.confidence >= this.CONFIDENCE_THRESHOLD) {
+                this.fillField(input, match.value);
+            } else if (aiEnabled && match?.value) {
+                console.log("AI Suggestion:", input.name || input.id);
             }
         });
 
-        alert('Greenhouse AutoFill complete! Please review the form.');
+        console.log("Greenhouse AutoFill complete.");
     }
+
+    /* ===============================
+       ✅ FIELD FILLING (FIXED)
+    ================================== */
+
+    fillField(input, value) {
+        if (!input) return;
+
+        // Use the improved setInputValue from GenericStrategy
+        this.setInputValue(input, value);
+    }
+
+    /* ===============================
+       ✅ GREENHOUSE SPECIFIC MATCHING
+    ================================== */
 
     findGreenhouseSpecificMatch(input, data) {
         const id = (input.id || "").toLowerCase();
-
+        const name = (input.name || "").toLowerCase();
         let labelTxt = "";
+
         if (input.id) {
-            const labelEl = document.querySelector(`label[for="${input.id}"]`);
-            if (labelEl) labelTxt = labelEl.innerText.toLowerCase();
+            const label = document.querySelector(`label[for="${input.id}"]`);
+            if (label) labelTxt = label.innerText.toLowerCase();
         }
 
         if (!labelTxt) {
-            const parentDiv = input.closest('div.field') || input.closest('div.input-wrapper') || input.closest('div.select__container') || input.parentElement;
-            labelTxt = parentDiv ? (parentDiv.querySelector('label')?.innerText || "").toLowerCase() : "";
+            const parent = input.closest("div") || input.parentElement;
+            labelTxt = parent?.innerText?.toLowerCase() || "";
         }
 
-        if (id.includes('first_name')) return { value: data.identity.first_name, confidence: 95 };
-        if (id.includes('last_name')) return { value: data.identity.last_name, confidence: 95 };
-        if (id.includes('email')) return { value: data.contact.email, confidence: 95 };
-        if (id.includes('phone')) return { value: data.contact.phone, confidence: 95 };
+        const identity = data?.identity || {};
+        const contact = data?.contact || {};
 
-        // Specific checks based on common Greenhouse custom questions
-        if (labelTxt.includes("linkedin") || id.includes("linkedin")) return { value: data.contact.linkedin, confidence: 90 };
-        if (labelTxt.includes("github") || labelTxt.includes("portfolio") || labelTxt.includes("website")) return { value: data.contact.portfolio || data.contact.github, confidence: 85 };
+        // ✅ Basic fields
+        if (id.includes("first_name") || name.includes("first_name"))
+            return { value: identity.first_name, confidence: 95 };
 
-        return null; // Return null if not a highly matched specific Greenhouse field
+        if (id.includes("last_name") || name.includes("last_name"))
+            return { value: identity.last_name, confidence: 95 };
+
+        if (id.includes("email") || name.includes("email"))
+            return { value: contact.email, confidence: 95 };
+
+        if (id.includes("phone") || name.includes("phone"))
+            return { value: contact.phone, confidence: 95 };
+
+        // ✅ LinkedIn
+        if (labelTxt.includes("linkedin") || id.includes("linkedin"))
+            return { value: contact.linkedin, confidence: 90 };
+
+        // ✅ Portfolio / GitHub
+        if (
+            labelTxt.includes("github") ||
+            labelTxt.includes("portfolio") ||
+            labelTxt.includes("website")
+        ) {
+            const portfolio = contact.portfolio || contact.github;
+            return { value: portfolio, confidence: 85 };
+        }
+
+        return null;
     }
 }
 
-// Register with Strategy Registry if available
-if (typeof ATSStrategyRegistry !== 'undefined') {
+/* ===============================
+   ✅ REGISTER STRATEGY
+================================== */
+
+if (typeof ATSStrategyRegistry !== "undefined") {
     ATSStrategyRegistry.register(
-        (url) => url.includes('greenhouse.io'),
+        (url, doc) => url.includes("greenhouse.io") || !!doc.querySelector('meta[content*="greenhouse"]') || !!doc.querySelector('.grnhse-wrapper'),
         GreenhouseStrategy
     );
 }

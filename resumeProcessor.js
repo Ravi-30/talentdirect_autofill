@@ -62,11 +62,31 @@ class ResumeProcessor {
             middleName = nameParts.length > 2 ? nameParts.slice(1, nameParts.length - 1).join(" ") : "";
         }
 
+        // Helper to find value by fuzzy key match
+        const findByPattern = (obj, patterns) => {
+            if (!obj) return "";
+            const keys = Object.keys(obj);
+            const foundKey = keys.find(k => patterns.some(p => k.toLowerCase().includes(p.toLowerCase())));
+            return foundKey ? obj[foundKey] : "";
+        };
+
         const identity = {
             first_name: firstName,
             middle_name: middleName,
             last_name: lastName,
-            full_name: fullName
+            full_name: fullName,
+            gender: basics.gender || "",
+            veteran_status: basics.veteranStatus || "",
+            disability_status: basics.disabilityStatus || "",
+            sponsorship_required: (basics.workAuthorization && basics.workAuthorization.requiresSponsorshipNowOrFuture) || "",
+            hispanic_latino: (basics.demographics && basics.demographics.hispanicOrLatino) || ""
+        };
+
+        const availabilityVal = (basics.availability && basics.availability.soonestStartDate) ||
+            findByPattern(basics.availability, ["soonest", "start date", "available"]);
+
+        const availability = {
+            start_date: availabilityVal
         };
 
         // 2. Contact & Links
@@ -173,17 +193,28 @@ class ResumeProcessor {
             summaryShort = firstSentence ? firstSentence.trim() + "." : summaryLong;
         }
 
+        const professionalStatement = findByPattern(basics, ["describe your relevant experiences", "industrial projects", "professional statement"]);
+
         // Output Index
         return {
             identity: identity,
             contact: contact,
             employment: employment,
+            availability: availability,
             skills: skillsData,
             summary: {
                 short: summaryShort,
-                long: summaryLong
+                long: summaryLong,
+                professional_statement: professionalStatement
             },
             education: resumeData.education || [],
+            education_flat: resumeData.education && resumeData.education[0] ? {
+                institution: resumeData.education[0].institution || "",
+                degree: resumeData.education[0].studyType || "",
+                major: resumeData.education[0].area || "",
+                start_date: resumeData.education[0].startDate || "",
+                end_date: resumeData.education[0].endDate || ""
+            } : {},
             reverse_maps: {
                 skill_to_years: skillToYears,
                 company_to_duration: companyToDuration,
