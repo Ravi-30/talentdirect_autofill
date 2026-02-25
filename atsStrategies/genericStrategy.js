@@ -22,53 +22,255 @@ class GenericStrategy {
             "contact.linkedin": ["linkedin", "linkedin url", "linkedin profile"],
             "contact.github": ["github", "github profile", "github url"],
             "summary.short": ["summary", "about", "bio", "description"],
-            "summary.professional_statement": ["describe your relevant experiences", "professional statement", "highlight your industrial projects", "research record"],
-            "employment.current_role": ["title", "position", "role", "job_title", "current role", "current title"],
+            "summary.professional_statement": ["describe your relevant experiences", "professional statement", "highlight your industrial projects", "research record", "relevant experiences", "industrial projects", "3-4 sentences", "highlight your projects", "highlight your industrial projects and research record"],
+            "summary.motivation": ["multiple roles", "motivation for each", "order them", "apply to multiple roles", "explain your motivation"],
+            "employment.current_role": ["job title", "current role", "current title", "position title"],
             "employment.current_company": ["company", "employer", "current company", "organization"],
-            "employment.years_total": ["total experience", "years experience", "total years"],
+            "employment.years_total": ["total years of experience", "total years experience", "number of years", "years of relevant experience"],
+            "employment.work_description": ["responsibilities", "work description", "job description", "summary", "description", "work highlights"],
+            "employment.start_date": ["work start", "employment start", "job start", "start date"],
+            "employment.end_date": ["work end", "employment end", "job end", "end date"],
             // Dropdown specific / Additional fields
             "education_flat.degree": ["degree", "level of education", "educational attainment"],
             "education_flat.institution": ["school", "university", "college", "institution"],
             "education_flat.major": ["major", "field of study", "specialization", "discipline"],
-            "education_flat.start_date": ["start date", "graduation date", "edu start"],
-            "education_flat.end_date": ["end date", "graduation date", "edu end"],
+            "education_flat.start_date": ["education start", "edu start", "graduation date", "education start date"],
+            "education_flat.end_date": ["education end", "edu end", "graduation date", "education end date"],
             "identity.gender": ["gender", "sex"],
             "identity.ethnicity": ["ethnicity", "race", "hispanic"],
             "identity.hispanic_latino": ["hispanic", "latino"],
             "identity.veteran_status": ["veteran", "military"],
-            "identity.disability_status": ["disability", "handicap"],
-            "identity.sponsorship_required": ["sponsorship", "visa", "work authorization", "authorized to work"],
-            "availability.start_date": ["start date", "availability", "soonest start", "available to start"]
+            "identity.disability_status": ["disability", "handicap", "voluntary self-identification"],
+            "identity.sponsorship_required": ["sponsorship", "visa", "work authorization", "authorized to work", "need sponsorship", "legal right to work"],
+            "availability.start_date": ["start date", "availability", "soonest start", "available to start", "soonest", "soonest you can start"],
+            "summary.onsite_sunnyvale": ["sunnyvale", "on-site", "work on-site", "sunnyvale office", "location", "sunnyvale, ca office"]
         };
     }
+
 
     getNestedValue(obj, path) {
         if (!obj || !path) return null;
         return path.split('.').reduce((acc, part) => acc && acc[part], obj);
     }
 
-    execute(normalizedData, aiEnabled) {
+    handleFileUpload(resumeFile) {
+        if (!resumeFile || !resumeFile.data) return;
+
+        const fileInputs = document.querySelectorAll('input[type="file"]');
+        fileInputs.forEach(input => {
+            const labelTxt = this.extractFeatures(input).label_text.toLowerCase();
+            const containerTxt = input.closest('div, fieldset')?.innerText?.toLowerCase() || "";
+            const combinedTxt = labelTxt + " " + containerTxt + " " + (input.name || "").toLowerCase() + " " + (input.id || "").toLowerCase();
+
+            if (combinedTxt.includes("resume") || combinedTxt.includes("cv") || combinedTxt.includes("curriculum")) {
+                console.log("AutoFill: Attempting to attach resume to", input.name || input.id);
+
+                try {
+                    // Convert base64 Data URL to Blob
+                    const byteString = atob(resumeFile.data.split(',')[1]);
+                    const mimeString = resumeFile.data.split(',')[0].split(':')[1].split(';')[0];
+                    const ab = new ArrayBuffer(byteString.length);
+                    const ia = new Uint8Array(ab);
+                    for (let i = 0; i < byteString.length; i++) {
+                        ia[i] = byteString.charCodeAt(i);
+                    }
+                    const blob = new Blob([ab], { type: mimeString });
+                    const file = new File([blob], resumeFile.name, { type: mimeString });
+
+                    // Use DataTransfer to simulate file selection
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    input.files = dataTransfer.files;
+
+                    // Trigger events
+                    ['change', 'input', 'blur'].forEach(ev => {
+                        input.dispatchEvent(new Event(ev, { bubbles: true }));
+                    });
+                } catch (e) {
+                    console.error("AutoFill: Error attaching file", e);
+                }
+            }
+        });
+    }
+
+    execute(normalizedData, aiEnabled, resumeFile = null) {
         console.log("Executing GenericStrategy...");
+
+        // --- Handle Resume Attachment ---
+        if (resumeFile) {
+            this.handleFileUpload(resumeFile);
+        }
+
+        // --- Handle Dynamic Entry Addition ---
+        const handleAddButtons = () => {
+            const sections = [
+                {
+                    data: normalizedData.employment?.history || [],
+                    selectors: ['.work-entry', '.experience-entry', 'fieldset[id*="work"]', 'div[id*="work-experience"]'],
+                    btnPatterns: ['Add Experience', 'Add Work', 'Add Another', 'Add Job']
+                },
+                {
+                    data: normalizedData.education || [],
+                    selectors: ['.education-entry', 'fieldset[id*="edu"]', 'div[id*="education"]'],
+                    btnPatterns: ['Add Education', 'Add School', 'Add Another']
+                }
+            ];
+
+            sections.forEach(section => {
+                if (section.data.length <= 1) return;
+
+                // Count existing containers
+                let containerCount = 0;
+                for (const sel of section.selectors) {
+                    const found = document.querySelectorAll(sel).length;
+                    if (found > containerCount) containerCount = found;
+                }
+
+                if (containerCount > 0 && containerCount < section.data.length) {
+                    // Try to find the "Add" button
+                    const buttons = Array.from(document.querySelectorAll('button, a, span.btn, .add-btn'));
+                    const addBtn = buttons.find(b => {
+                        const text = b.innerText || "";
+                        return section.btnPatterns.some(p => text.toLowerCase().includes(p.toLowerCase()));
+                    });
+
+                    if (addBtn) {
+                        console.log(`AutoFill: Clicking "Add" button for count ${containerCount} < ${section.data.length}`);
+                        addBtn.click();
+                        // We click only once per execute cycle. 
+                        // The MutationObserver in content.js will trigger execute() again if the DOM changes.
+                    }
+                }
+            });
+        };
+
+        handleAddButtons();
+
         const inputs = document.querySelectorAll('input, textarea, select');
 
         // This array will hold the report data for the side panel
         let fillReport = [];
+
+        // Track field groups to avoid filling the same entry multiple times
+        let educationGroupTracker = new Map();
+        let employmentGroupTracker = new Map();
 
         inputs.forEach(input => {
             // Allow hidden fields if they have a name or id (likely state holders for custom dropdowns)
             if (input.type === 'hidden' && !input.id && !input.name && !input.getAttribute('data-automation-id')) return;
             if (input.disabled || input.readOnly) return;
 
-            // Skip radio/checkbox if they require specific handling in sub-strategies
-            if (input.type === 'radio' || input.type === 'checkbox') return;
+            // Skip inputs that are already filled — prevents re-triggering confidence popups
+            // on second pass (e.g. from MutationObserver after initial fill)
+            if (input.value && input.value.trim() !== '') return;
 
-            const match = this.findValueForInput(input, normalizedData);
+            // Skip Select2-hidden selects — they are enhanced custom dropdowns whose visual
+            // layer is controlled by Select2/jQuery. Setting their value directly won't update
+            // the UI. Platform-specific strategies (e.g. GreenhouseStrategy) handle these.
+            if (
+                input.tagName === 'SELECT' &&
+                (input.classList.contains('select2-hidden-accessible') ||
+                    input.getAttribute('aria-hidden') === 'true' && input.style.display === 'none')
+            ) return;
+
+            // Handle Radio/Checkbox
+            if (input.type === 'radio' || input.type === 'checkbox') {
+                this.handleRadioCheckbox(input, normalizedData);
+                return;
+            }
+
+            let match = this.findValueForInput(input, normalizedData);
+
+            // --- Multi-Entry Grouping Logic (Education & Employment) ---
+            if (match && match.fieldKey) {
+                const isEdu = match.fieldKey.startsWith('education_flat');
+                const isEmp = match.fieldKey.startsWith('employment.');
+
+                if (isEdu || isEmp) {
+                    const sourceData = isEdu ? normalizedData.education : (normalizedData.employment?.history || []);
+
+                    if (sourceData && sourceData.length > 0) {
+                        const features = this.extractFeatures(input);
+                        const context = (features.label_text + " " + features.nearby_text + " " + (input.name || "")).toLowerCase();
+                        let bestIdx = -1;
+
+                        // 1. Context Match
+                        let highestScore = 0;
+                        sourceData.forEach((item, index) => {
+                            let score = 0;
+                            const normVal = isEdu ? (item.normDegree + " " + item.normMajor) : (item.normCompany + " " + item.normTitle);
+                            if (normVal && context.includes(normVal.toLowerCase())) score += 50;
+                            if (item.startDate && context.includes(item.startDate.split('-')[0])) score += 20;
+
+                            if (score > highestScore) {
+                                highestScore = score;
+                                bestIdx = index;
+                            }
+                        });
+
+                        // 2. Name-based Index (e.g., degree_0, company_1)
+                        if (bestIdx === -1) {
+                            const indexMatch = (input.name || "").match(/\d+/);
+                            if (indexMatch) {
+                                const foundIdx = parseInt(indexMatch[0]);
+                                if (foundIdx < sourceData.length) bestIdx = foundIdx;
+                            }
+                        }
+
+                        // 3. Proximity Fallback
+                        if (bestIdx === -1) {
+                            const tracker = isEdu ? educationGroupTracker : employmentGroupTracker;
+                            const selector = isEdu ? '.education-entry, fieldset' : '.work-entry, .experience-entry, fieldset';
+                            const container = input.closest(`${selector}, div[id*="edu"], div[id*="work"]`);
+
+                            const containers = Array.from(document.querySelectorAll(selector));
+                            let groupId = container ? containers.indexOf(container) : "global";
+                            if (groupId === -1) groupId = "misc-" + (isEdu ? "edu" : "emp");
+
+                            if (!tracker.has(groupId)) {
+                                tracker.set(groupId, tracker.size % sourceData.length);
+                            }
+                            bestIdx = tracker.get(groupId);
+                        }
+
+                        if (bestIdx !== -1) {
+                            const subKey = match.fieldKey.split('.')[1];
+                            if (isEdu) {
+                                const eduKeyMap = {
+                                    'major': 'area',
+                                    'start_date': 'startDate',
+                                    'end_date': 'endDate'
+                                };
+                                const targetKey = eduKeyMap[subKey] || subKey;
+                                match.value = sourceData[bestIdx][targetKey] || sourceData[bestIdx][subKey] || sourceData[bestIdx].degree || "";
+                            } else {
+                                const empKeyMap = {
+                                    'current_role': 'position',
+                                    'current_company': 'name',
+                                    'work_description': 'summary',
+                                    'start_date': 'startDate',
+                                    'end_date': 'endDate'
+                                };
+                                const targetKey = empKeyMap[subKey] || subKey;
+                                match.value = sourceData[bestIdx][targetKey] || "";
+                            }
+                            match.confidence = 95;
+                        }
+                    }
+                }
+            }
+
+
 
             let status = 'unmatched';
             let finalValue = '';
 
             if (match && match.value) {
-                if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
+                // Silent skip: if confidence is too low, don't fill AND don't show a popup
+                const SILENT_SKIP_THRESHOLD = 40;
+                if (match.confidence < SILENT_SKIP_THRESHOLD) {
+                    // Too low to be useful — ignore silently
+                } else if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
                     this.setInputValue(input, match.value, 'green');
                     status = 'filled';
                     finalValue = match.value;
@@ -97,6 +299,7 @@ class GenericStrategy {
                 });
             }
         });
+
 
         // Send the fill report to the sidepanel
         chrome.runtime.sendMessage({
@@ -157,8 +360,8 @@ class GenericStrategy {
             name_attr: 40,
             id_attr: 40,
             aria_label: 35,
-            label_text: 35,
-            placeholder: 20
+            label_text: 60, // Increased from 35 to favor explicit questions
+            placeholder: 25
         };
 
         let matchedPrimaryFeature = false;
@@ -209,7 +412,36 @@ class GenericStrategy {
         const features = this.extractFeatures(input);
 
         // --- 1. Attempt Domain-Specific Dynamic Reverse Lookups ---
-        if (features.normalized_combined.includes("year") || features.normalized_combined.includes("experience")) {
+        // Guard: skip this if the label matches a professional statement question.
+        // (The label may contain "experiences" which would falsely trigger the years lookup.)
+        const PROFESSIONAL_STATEMENT_PHRASES = [
+            "describe your relevant experiences",
+            "industrial projects",
+            "research record",
+            "3-4 sentences",
+            "highlight your",
+            "professional statement"
+        ];
+        const isProfessionalStatementField = PROFESSIONAL_STATEMENT_PHRASES.some(phrase =>
+            features.label_text.includes(phrase) ||
+            features.nearby_text.includes(phrase) ||
+            features.aria_label.includes(phrase)
+        );
+
+        const MOTIVATION_PHRASES = [
+            "multiple roles",
+            "motivation for each",
+            "order them",
+            "apply to multiple roles",
+            "explain your motivation"
+        ];
+        const isMotivationField = MOTIVATION_PHRASES.some(phrase =>
+            features.label_text.includes(phrase) ||
+            features.nearby_text.includes(phrase) ||
+            features.aria_label.includes(phrase)
+        );
+
+        if (!isProfessionalStatementField && (features.normalized_combined.includes("year") || features.normalized_combined.includes("experience"))) {
             if (normalizedData.reverse_maps) {
                 // Check skills first
                 for (const [skill, years] of Object.entries(normalizedData.reverse_maps.skill_to_years)) {
@@ -231,6 +463,24 @@ class GenericStrategy {
             }
         }
 
+        // Fast-path: if this is clearly a professional statement field, return it directly
+        if (isProfessionalStatementField && normalizedData.summary?.professional_statement) {
+            return {
+                value: normalizedData.summary.professional_statement,
+                confidence: 100,
+                fieldKey: 'summary.professional_statement'
+            };
+        }
+
+        // Fast-path: if this is clearly a motivation/multiple-roles field, return it directly
+        if (isMotivationField && normalizedData.summary?.motivation) {
+            return {
+                value: normalizedData.summary.motivation,
+                confidence: 100,
+                fieldKey: 'summary.motivation'
+            };
+        }
+
         // --- 2. Standard Heuristic Matching ---
         let bestMatch = { value: null, confidence: 0 };
 
@@ -241,12 +491,43 @@ class GenericStrategy {
                 const value = this.getNestedValue(normalizedData, fieldKey);
 
                 if (value) {
-                    bestMatch = { value, confidence };
+                    bestMatch = { value, confidence, fieldKey };
                 }
             }
         }
 
         return bestMatch.confidence > 0 ? bestMatch : null;
+    }
+
+    /**
+     * Handle Radio and Checkbox inputs
+     */
+    handleRadioCheckbox(input, normalizedData) {
+        const match = this.findValueForInput(input, normalizedData);
+        if (!match || !match.value) return;
+
+        const val = String(match.value).toLowerCase();
+        const labelText = (this.getLabelText(input) || "").toLowerCase();
+
+        if (input.type === 'radio') {
+            // If the label matches the value, or common synonyms
+            const isPositiveMatch =
+                labelText.includes(val) ||
+                (val === 'yes' && (labelText === 'yes' || labelText === 'y')) ||
+                (val === 'no' && (labelText === 'no' || labelText === 'n')) ||
+                (val.includes('not a protected veteran') && labelText.includes('not a protected veteran')) ||
+                (val.includes('no, i do not have a disability') && labelText.includes('no, i do not have a disability'));
+
+            if (isPositiveMatch) {
+                input.checked = true;
+                this.setInputValue(input, null, 'green'); // Visual feedback
+            }
+        } else if (input.type === 'checkbox') {
+            if (val === 'yes' || val === 'true' || val === '1') {
+                input.checked = true;
+                this.setInputValue(input, null, 'green');
+            }
+        }
     }
 
     getLabelText(input) {
@@ -288,20 +569,37 @@ class GenericStrategy {
             if (input.tagName === 'SELECT') {
                 this.setSelectValue(input, value);
             } else {
-                input.value = value;
+                // Use the native setter to bypass React's value interception,
+                // then dispatch a synthetic input event so React's onChange fires.
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                )?.set;
+                const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLTextAreaElement.prototype, 'value'
+                )?.set;
+
+                if (input.tagName === 'TEXTAREA' && nativeTextAreaValueSetter) {
+                    nativeTextAreaValueSetter.call(input, value);
+                } else if (nativeInputValueSetter) {
+                    nativeInputValueSetter.call(input, value);
+                } else {
+                    input.value = value;
+                }
             }
 
-            // Dispatch a flurry of events to satisfy different frameworks (React, Vue, etc.)
-            ['input', 'change', 'blur', 'focus', 'click'].forEach(eventType => {
-                const event = new Event(eventType, { bubbles: true });
+            // Dispatch events to satisfy React (needs bubbles:true + composed:true for shadow DOM)
+            ['input', 'change', 'blur'].forEach(eventType => {
+                const event = new Event(eventType, { bubbles: true, composed: true });
                 input.dispatchEvent(event);
             });
 
-            // Bonus: trigger React's internal onChange if possible
+            // Also try the React _valueTracker approach as a belt-and-suspenders
             const tracker = input._valueTracker;
             if (tracker) {
-                tracker.setValue(value);
+                tracker.setValue(''); // Trick React into thinking value changed
             }
+            // Re-dispatch input after tracker reset
+            input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         }
 
         const originalBg = input.style.backgroundColor;
@@ -453,3 +751,9 @@ class GenericStrategy {
         });
     }
 }
+
+// Global exposure
+if (typeof window !== 'undefined') {
+    window.GenericStrategy = GenericStrategy;
+}
+
