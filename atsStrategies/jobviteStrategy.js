@@ -9,7 +9,7 @@ class JobviteStrategy extends GenericStrategy {
     }
 
     execute(normalizedData, aiEnabled) {
-        console.log("Executing JobviteStrategy...");
+        // console.log("Executing JobviteStrategy...");
         
         // Basic fallback execution. Override findValueForInput if specific DOM structures are known.
         super.execute(normalizedData, aiEnabled);

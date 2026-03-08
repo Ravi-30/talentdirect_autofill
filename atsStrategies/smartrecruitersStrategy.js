@@ -9,7 +9,7 @@ class SmartRecruitersStrategy extends GenericStrategy {
     }
 
     execute(normalizedData, aiEnabled) {
-        console.log("Executing SmartRecruitersStrategy...");
+        // console.log("Executing SmartRecruitersStrategy...");
         
         // Basic fallback execution. Override findValueForInput if specific DOM structures are known.
         super.execute(normalizedData, aiEnabled);

@@ -9,7 +9,7 @@ class UltiproStrategy extends GenericStrategy {
     }
 
     execute(normalizedData, aiEnabled) {
-        console.log("Executing UltiproStrategy...");
+        // console.log("Executing UltiproStrategy...");
         
         // Basic fallback execution. Override findValueForInput if specific DOM structures are known.
         super.execute(normalizedData, aiEnabled);

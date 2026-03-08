@@ -6,43 +6,18 @@
   "permissions": [
     "storage",
     "contextMenus",
-    "sidePanel"
+    "sidePanel",
+    "tabs"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:11434 https://api.openai.com https://api.anthropic.com;"
   },
   "host_permissions": [
-    "*://*.adp.com/*",
-    "*://*.applytojob.com/*",
-    "*://*.ashbyhq.com/*",
-    "*://*.ashhq.by/*",
-    "*://*.bamboohr.com/*",
-    "*://*.brassring.com/*",
-    "*://*.icims.com/*",
-    "*://*.indeed.com/*",
-    "*://*.jobvite.com/*",
-    "*://*.linkedin.com/*",
-    "*://*.oraclecloud.com/*",
-    "*://*.paychex.com/*",
-    "*://*.paycom.com/*",
-    "*://*.personio.com/*",
-    "*://*.recruitee.com/*",
-    "*://*.rippling.com/*",
-    "*://*.sapsf.com/*",
-    "*://*.smartrecruiters.com/*",
-    "*://*.successfactors.com/*",
-    "*://*.taleo.net/*",
-    "*://*.teamtailor.com/*",
-    "*://*.ultipro.com/*",
-    "*://*.workable.com/*",
-    "http://localhost:11434/*",
-    "https://*.greenhouse.io/*",
-    "https://*.lever.co/*",
-    "https://*.myworkdayjobs.com/*",
-    "https://*.workday.com/*",
-    "https://boards.greenhouse.io/*",
-    "https://jobs.lever.co/*"
+    "*://*/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "Open side panel"
   },
@@ -52,39 +27,12 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.adp.com/*",
-        "*://*.applytojob.com/*",
-        "*://*.ashbyhq.com/*",
-        "*://*.ashhq.by/*",
-        "*://*.bamboohr.com/*",
-        "*://*.brassring.com/*",
-        "*://*.icims.com/*",
-        "*://*.indeed.com/*",
-        "*://*.jobvite.com/*",
-        "*://*.linkedin.com/*",
-        "*://*.oraclecloud.com/*",
-        "*://*.paychex.com/*",
-        "*://*.paycom.com/*",
-        "*://*.personio.com/*",
-        "*://*.recruitee.com/*",
-        "*://*.rippling.com/*",
-        "*://*.sapsf.com/*",
-        "*://*.smartrecruiters.com/*",
-        "*://*.successfactors.com/*",
-        "*://*.taleo.net/*",
-        "*://*.teamtailor.com/*",
-        "*://*.ultipro.com/*",
-        "*://*.workable.com/*",
-        "https://*.greenhouse.io/*",
-        "https://*.lever.co/*",
-        "https://*.myworkdayjobs.com/*",
-        "https://*.workday.com/*",
-        "https://boards.greenhouse.io/*",
-        "https://jobs.lever.co/*"
+        "*://*/*"
       ],
       "js": [
-        "atsStrategies/strategyRegistry.js",
+        "resumeProcessor.js",
         "atsStrategies/genericStrategy.js",
+        "atsStrategies/strategyRegistry.js",
         "atsStrategies/adpStrategy.js",
         "atsStrategies/applytojobStrategy.js",
         "atsStrategies/ashbyStrategy.js",
@@ -110,7 +58,8 @@
         "atsStrategies/workableStrategy.js",
         "atsStrategies/workdayStrategy.js",
         "content.js"
-      ]
+      ],
+      "all_frames": true
     }
   ],
   "icons": {

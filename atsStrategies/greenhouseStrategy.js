@@ -5,9 +5,10 @@ class GreenhouseStrategy extends GenericStrategy {
         this.executed = false;
     }
 
-    execute(normalizedData, aiEnabled, resumeFile = null) {
-        if (this.executed) {
-            console.log("GreenhouseStrategy already executed. Skipping...");
+    async execute(normalizedData, aiEnabled, resumeFile = null) {
+        // Allow re-execution for auto-apply queue (check if this is a new page load)
+        if (this.executed && window.location.href === this.lastExecutedUrl) {
+            // console.log("GreenhouseStrategy already executed on this URL. Skipping...");
             return;
         }
 
@@ -17,19 +18,38 @@ class GreenhouseStrategy extends GenericStrategy {
         }
 
         this.executed = true;
-        console.log("Executing GreenhouseStrategy...");
+        this.lastExecutedUrl = window.location.href;
+        // console.log("Executing GreenhouseStrategy...");
+        // console.log("  - Resume has:", {
+            name: normalizedData.identity?.first_name,
+            email: normalizedData.contact?.email,
+            education: normalizedData.education?.length || 0,
+            employment: normalizedData.employment?.history?.length || 0
+        });
+
+        // Check if this is a Greenhouse form by looking for key indicators
+        const hasGreenhouseForm = !!document.querySelector('[id*="application-form"], [id*="job-application"], [class*="greenhouse"]');
+        const inputFields = document.querySelectorAll('input, textarea, select');
+        // console.log("  - Page has", inputFields.length, "input/textarea/select fields");
+        // console.log("  - Greenhouse form detected:", hasGreenhouseForm);
+
+        if (!hasGreenhouseForm && inputFields.length === 0) {
+            console.warn("GreenhouseStrategy: No form elements detected on this page - might not be a job application page");
+        }
 
         // Run base fill first (handles text inputs, textareas, native selects)
-        super.execute(normalizedData, aiEnabled, resumeFile);
+        // console.log("✓ Starting base fill (GenericStrategy)...");
+        await super.execute(normalizedData, aiEnabled, resumeFile);
 
         // Then handle Greenhouse-specific custom components (Select2, country)
         // Slight delay to let Select2 initialize after base fill
-        setTimeout(() => {
-            this._fillGreenhouseEducation(normalizedData);
-            this._fillCountryDropdown(normalizedData);
-        }, 200);
+        await this.sleep(300);
+        // console.log("✓ Filling Greenhouse education dropdowns...");
+        this._fillGreenhouseEducation(normalizedData);
+        // console.log("✓ Filling country dropdown...");
+        this._fillCountryDropdown(normalizedData);
 
-        console.log("Greenhouse AutoFill complete.");
+        // console.log("✓ Greenhouse AutoFill complete.");
     }
 
     /* ===============================
@@ -45,7 +65,7 @@ class GreenhouseStrategy extends GenericStrategy {
         const education = normalizedData.education || [];
         if (!education.length) return;
 
-        console.log("GH: Filling education dropdowns...", education);
+        // console.log("GH: Filling education dropdowns...", education);
 
         // Greenhouse repeats education blocks — find all fieldsets
         // Greenhouse uses: <div id="education_0">, <div id="education_1">, etc.
@@ -80,7 +100,7 @@ class GreenhouseStrategy extends GenericStrategy {
             const degree = edu.studyType || edu.Discipline || edu.degree || "";
             const major = edu.area || "";
 
-            console.log(`GH: Education block ${idx}: institution="${institution}", degree="${degree}", major="${major}"`);
+            // console.log(`GH: Education block ${idx}: institution="${institution}", degree="${degree}", major="${major}"`);
 
             // Fill each field in this block
             this._fillSelect2InBlock(block, ['school', 'institution', 'university', 'college'], institution);
@@ -113,6 +133,7 @@ class GreenhouseStrategy extends GenericStrategy {
 
         // Find all <select> elements in this block
         const selects = Array.from((block === document ? document : block).querySelectorAll('select'));
+        if (selects.length === 0) return; // Modern GH boards use <input>, handled by base GenericStrategy
 
         for (const sel of selects) {
             const combined = normalize(
@@ -124,16 +145,17 @@ class GreenhouseStrategy extends GenericStrategy {
 
             if (!keyFragments.some(k => combined.includes(normalize(k)))) continue;
 
-            console.log(`GH: Found select for [${keyFragments}]: id="${sel.id}", options=${sel.options.length}`);
+            // console.log(`GH: Found select for [${keyFragments}]: id="${sel.id}", options=${sel.options.length}`);
 
             // --- Strategy 1: jQuery + Select2 API ---
             if (typeof window.$ !== 'undefined' && typeof window.$.fn.select2 !== 'undefined') {
                 try {
                     // Find the best matching option
-                    const bestOption = this._findBestOption(sel, value, normalize, normValue);
-                    if (bestOption !== null) {
-                        window.$(sel).val(bestOption).trigger('change');
-                        console.log(`GH: jQuery Select2 set [${keyFragments}] = "${bestOption}"`);
+                    const bestIdx = this._findBestOption(sel, value, normalize, normValue);
+                    if (bestIdx !== null) {
+                        const bestValueString = sel.options[bestIdx].value;
+                        window.$(sel).val(bestValueString).trigger('change');
+                        // console.log(`GH: jQuery Select2 set [${keyFragments}] = "${bestValueString}"`);
                         return;
                     }
                 } catch (e) {
@@ -174,7 +196,7 @@ class GreenhouseStrategy extends GenericStrategy {
 
                         if (bestOpt && bestScore >= 60) {
                             bestOpt.click();
-                            console.log(`GH: Select2 click-select [${keyFragments}] = "${bestOpt.innerText}"`);
+                            // console.log(`GH: Select2 click-select [${keyFragments}] = "${bestOpt.innerText}"`);
                         } else {
                             console.warn(`GH: No matching option for "${value}" in Select2 (best ${bestScore})`);
                             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -189,22 +211,25 @@ class GreenhouseStrategy extends GenericStrategy {
             if (bestIdx !== null) {
                 sel.selectedIndex = parseInt(bestIdx);
                 this._triggerReactChange(sel, sel.value);
-                console.log(`GH: Raw select fallback [${keyFragments}] = idx ${bestIdx}`);
+                // console.log(`GH: Raw select fallback [${keyFragments}] = idx ${bestIdx}`);
             }
             return;
         }
 
-        console.warn(`GH: No select found for [${keyFragments}] with value "${value}"`);
+        // console.log(`GH: No Select2 found for [${keyFragments}] with value "${value}" (may be a modern text input instead)`);
     }
 
     /**
      * Finds the best matching option INDEX in a <select> element.
-     * Returns the option VALUE (not index) for jQuery, or index for raw select.
+     * Returns the integer index of the best match.
      * Returns null if no match found.
      */
     _findBestOption(select, value, normalize, normValue) {
         let bestIdx = -1;
         let bestScore = 0;
+
+        const usVariations = this.getUSVariations();
+        const isUS = usVariations.includes(normValue);
 
         for (let i = 0; i < select.options.length; i++) {
             const opt = select.options[i];
@@ -213,6 +238,7 @@ class GreenhouseStrategy extends GenericStrategy {
             let score = 0;
 
             if (optText === normValue || optVal === normValue) score = 100;
+            else if (isUS && (usVariations.includes(optText) || usVariations.includes(optVal))) score = 95;
             else if (optText.startsWith(normValue) || normValue.startsWith(optText)) score = 80;
             else if (optText.includes(normValue) || normValue.includes(optText)) score = 60;
 
@@ -220,7 +246,7 @@ class GreenhouseStrategy extends GenericStrategy {
         }
 
         if (bestIdx !== -1 && bestScore >= 60) {
-            return select.options[bestIdx].value; // Return value string (for jQuery API)
+            return bestIdx; // Return integer index
         }
         return null;
     }
@@ -249,25 +275,26 @@ class GreenhouseStrategy extends GenericStrategy {
         });
 
         for (const sel of selects) {
-            const bestVal = this._findBestOption(sel, country, normalize, normCountry);
-            if (bestVal !== null) {
+            const bestIdx = this._findBestOption(sel, country, normalize, normCountry);
+            if (bestIdx !== null) {
+                const bestValue = sel.options[bestIdx].value;
                 // Try jQuery + Select2 first
                 if (typeof window.$ !== 'undefined' && typeof window.$.fn.select2 !== 'undefined') {
                     try {
-                        window.$(sel).val(bestVal).trigger('change');
-                        console.log(`GH: Country set via jQuery Select2 = "${bestVal}"`);
+                        window.$(sel).val(bestValue).trigger('change');
+                        // console.log(`GH: Country set via jQuery Select2 = "${bestValue}"`);
                         return;
                     } catch (e) { /* fall through */ }
                 }
                 // Raw fallback
-                sel.value = bestVal;
-                this._triggerReactChange(sel, bestVal);
-                console.log(`GH: Country set via raw select = "${bestVal}"`);
+                sel.value = bestValue;
+                this._triggerReactChange(sel, bestValue);
+                // console.log(`GH: Country set via raw select = "${bestValue}"`);
                 return;
             }
         }
 
-        console.warn(`GH: Could not match country "${country}" to any dropdown`);
+        // console.log(`GH: No country dropdown found for "${country}" (may be a generic field or absent)`);
     }
 
     /**
@@ -329,6 +356,9 @@ class GreenhouseStrategy extends GenericStrategy {
         if (id.includes("last_name") || name.includes("last_name"))
             return { value: identity.last_name, confidence: 100, fieldKey: "identity.last_name" };
 
+        if (id.includes("preferred_name") || name.includes("preferred_name") || labelTxt.includes("preferred first name") || labelTxt.includes("nickname"))
+            return { value: identity.preferred_name, confidence: 100, fieldKey: "identity.preferred_name" };
+
         if (id.includes("email") || name.includes("email"))
             return { value: contact.email, confidence: 100, fieldKey: "contact.email" };
 
@@ -344,6 +374,15 @@ class GreenhouseStrategy extends GenericStrategy {
             return { value: portfolio, confidence: 95, fieldKey };
         }
 
+        // Custom Questions / Citizenship
+        if (labelTxt.includes("sponsorship") || labelTxt.includes("visa status") || labelTxt.includes("work authorization")) {
+            return { value: identity.sponsorship_required, confidence: 90, fieldKey: "identity.sponsorship_required" };
+        }
+
+        if (labelTxt.includes("claude") || labelTxt.includes("cursor") || labelTxt.includes("ai tool")) {
+            return { value: data.summary.ai_tool_experience, confidence: 90, fieldKey: "summary.ai_tool_experience" };
+        }
+
         return null;
     }
 }
@@ -354,7 +393,10 @@ class GreenhouseStrategy extends GenericStrategy {
 
 if (typeof ATSStrategyRegistry !== "undefined") {
     ATSStrategyRegistry.register(
-        (url, doc) => url.includes("greenhouse.io") || !!doc.querySelector('meta[content*="greenhouse"]') || !!doc.querySelector('.grnhse-wrapper'),
+        (url, doc) => url.includes("greenhouse.io") ||
+            !!doc.querySelector('meta[content*="greenhouse"]') ||
+            !!doc.querySelector('.grnhse-wrapper') ||
+            !!doc.querySelector('#grnhse_app'),
         GreenhouseStrategy
     );
 }

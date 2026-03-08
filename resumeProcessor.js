@@ -52,14 +52,19 @@ class ResumeProcessor {
         const profiles = basics.profiles || [];
 
         // 1. Identity
-        const fullName = basics.name || "";
-        const nameParts = fullName.split(' ');
+        const fullName = (basics.name || "").trim();
+        const nameParts = fullName.split(/\s+/);
         let firstName = "", middleName = "", lastName = "";
 
-        if (nameParts.length > 0) {
+        if (nameParts.length === 1) {
             firstName = nameParts[0];
-            lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
-            middleName = nameParts.length > 2 ? nameParts.slice(1, nameParts.length - 1).join(" ") : "";
+        } else if (nameParts.length === 2) {
+            firstName = nameParts[0];
+            lastName = nameParts[1];
+        } else if (nameParts.length > 2) {
+            firstName = nameParts[0];
+            lastName = nameParts[nameParts.length - 1];
+            middleName = nameParts.slice(1, nameParts.length - 1).join(" ");
         }
 
         // Helper to find value by fuzzy key match
@@ -70,16 +75,21 @@ class ResumeProcessor {
             return foundKey ? obj[foundKey] : "";
         };
 
+        const preferredName = basics.preferredName || basics.nickname || findByPattern(basics, ["preferred name", "nickname"]) || "";
+
         const identity = {
             first_name: firstName,
             middle_name: middleName,
             last_name: lastName,
+            preferred_name: preferredName,
             full_name: fullName,
             gender: basics.gender || "",
+            pronouns: basics.pronouns || (basics.custom && basics.custom.pronouns) || "",
             veteran_status: basics.veteranStatus || "",
             disability_status: basics.disabilityStatus || "",
-            sponsorship_required: (basics.workAuthorization && basics.workAuthorization.requiresSponsorshipNowOrFuture) || "",
-            hispanic_latino: (basics.demographics && basics.demographics.hispanicOrLatino) || ""
+            sponsorship_required: (basics.workAuthorization && basics.workAuthorization.requiresSponsorshipNowOrFuture) ||
+                findByPattern(basics.workAuthorization, ["sponsorship"]),
+            hispanic_latino: basics.hispanicLatino || (basics.demographics && basics.demographics.hispanicOrLatino) || ""
         };
 
         const availabilityVal = (basics.availability && basics.availability.soonestStartDate) ||
@@ -111,32 +121,37 @@ class ResumeProcessor {
         };
 
         // 3. Employment & Reverse Maps
-        const currentWork = work[0] || {};
-        let totalMonths = 0;
+        const workEntries = work.map(job => {
+            const start = job.startDate ? new Date(job.startDate) : null;
+            const end = job.endDate ? new Date(job.endDate) : new Date();
+            let durationMonths = 0;
 
+            if (start && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                const diffTime = Math.abs(end - start);
+                durationMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44));
+            }
+
+            return {
+                ...job,
+                durationMonths,
+                normCompany: this.normalizeText(job.name),
+                normTitle: this.normalizeText(job.position)
+            };
+        });
+
+        let totalMonths = 0;
         const companyToDuration = {};
         const titleToDuration = {};
         const rolesByYear = {};
 
-        work.forEach(job => {
-            const start = new Date(job.startDate);
-            const end = job.endDate ? new Date(job.endDate) : new Date();
+        workEntries.forEach(job => {
+            totalMonths += job.durationMonths;
+            companyToDuration[job.normCompany] = (companyToDuration[job.normCompany] || 0) + job.durationMonths;
+            titleToDuration[job.normTitle] = (titleToDuration[job.normTitle] || 0) + job.durationMonths;
 
-            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                const diffTime = Math.abs(end - start);
-                const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30.44));
-                totalMonths += diffMonths;
-
-                const normCompany = this.normalizeText(job.name);
-                const normTitle = this.normalizeText(job.position);
-
-                // Track durations
-                companyToDuration[normCompany] = (companyToDuration[normCompany] || 0) + diffMonths;
-                titleToDuration[normTitle] = (titleToDuration[normTitle] || 0) + diffMonths;
-
-                // Track roles by year
-                const startYear = start.getFullYear();
-                const endYear = end.getFullYear();
+            if (job.startDate) {
+                const startYear = new Date(job.startDate).getFullYear();
+                const endYear = job.endDate ? new Date(job.endDate).getFullYear() : new Date().getFullYear();
                 for (let y = startYear; y <= endYear; y++) {
                     if (!rolesByYear[y]) rolesByYear[y] = [];
                     if (!rolesByYear[y].includes(job.position)) {
@@ -147,10 +162,11 @@ class ResumeProcessor {
         });
 
         const employment = {
-            current_role: currentWork.position || basics.label || "",
-            current_company: currentWork.name || "",
+            current_role: workEntries[0]?.position || basics.label || "",
+            current_company: workEntries[0]?.name || "",
             years_total: Math.round(totalMonths / 12),
-            roles_by_year: rolesByYear
+            roles_by_year: rolesByYear,
+            history: workEntries
         };
 
         // 4. Skills & Reverse Maps
@@ -170,9 +186,6 @@ class ResumeProcessor {
                 normalizedSkillSet.add(normKeyword);
                 skillCategories[catName].push(normKeyword);
 
-                // Estimate skill frequency/years based on overall employment
-                // In a perfect system, skills would map to specific jobs. 
-                // We'll approximate by assigning total experience to core skills for now.
                 skillFrequency[normKeyword] = (skillFrequency[normKeyword] || 0) + 1;
                 skillToYears[normKeyword] = employment.years_total;
             });
@@ -193,7 +206,15 @@ class ResumeProcessor {
             summaryShort = firstSentence ? firstSentence.trim() + "." : summaryLong;
         }
 
-        const professionalStatement = findByPattern(basics, ["describe your relevant experiences", "industrial projects", "professional statement"]);
+        const professionalStatement = findByPattern(basics, ["describe your relevant experiences", "industrial projects", "professional statement"]) ||
+            findByPattern(basics.experience, ["describe your relevant experiences", "industrial projects", "highlight"]);
+
+        const motivation = findByPattern(basics.experience, ["multiple roles", "motivation for each", "order them", "apply to multiple"]) || "";
+
+
+        const onsiteSunnyvale = findByPattern(basics.custom, ["sunnyvale", "on-site", "work on-site"]);
+        const aiToolExperience = findByPattern(basics.custom, ["claude", "cursor", "experience"]) ||
+            findByPattern(basics.experience, ["claude", "cursor", "experience"]);
 
         // Output Index
         return {
@@ -205,12 +226,21 @@ class ResumeProcessor {
             summary: {
                 short: summaryShort,
                 long: summaryLong,
-                professional_statement: professionalStatement
+                professional_statement: professionalStatement,
+                motivation: motivation,
+                onsite_sunnyvale: onsiteSunnyvale,
+                ai_tool_experience: aiToolExperience
             },
-            education: resumeData.education || [],
+            education: (resumeData.education || []).map(edu => ({
+                ...edu,
+                degree: edu.studyType || edu.Discipline || "",
+                normInstitution: this.normalizeText(edu.institution),
+                normDegree: this.normalizeText(edu.studyType || edu.Discipline || ""),
+                normMajor: this.normalizeText(edu.area || "")
+            })),
             education_flat: resumeData.education && resumeData.education[0] ? {
                 institution: resumeData.education[0].institution || "",
-                degree: resumeData.education[0].studyType || "",
+                degree: resumeData.education[0].studyType || resumeData.education[0].Discipline || "",
                 major: resumeData.education[0].area || "",
                 start_date: resumeData.education[0].startDate || "",
                 end_date: resumeData.education[0].endDate || ""
@@ -221,6 +251,7 @@ class ResumeProcessor {
                 title_to_duration: titleToDuration
             }
         };
+
     }
 }
 
@@ -228,5 +259,6 @@ class ResumeProcessor {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = ResumeProcessor;
 } else {
-    window.ResumeProcessor = ResumeProcessor;
+    const globalScope = typeof window !== 'undefined' ? window : self;
+    globalScope.ResumeProcessor = ResumeProcessor;
 }

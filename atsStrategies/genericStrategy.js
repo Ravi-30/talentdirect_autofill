@@ -9,23 +9,26 @@ class GenericStrategy {
         // Field Mapping Dictionary
         this.FIELD_MAPPING = {
             "identity.first_name": ["first_name", "first name", "fname", "given name"],
+            "identity.middle_name": ["middle_name", "middle name", "m.i.", "middle initial"],
             "identity.last_name": ["last_name", "last name", "lname", "surname", "family name"],
+            "identity.preferred_name": ["preferred_name", "preferred name", "preferred first name", "nickname"],
             "identity.full_name": ["name", "fullname", "full_name", "applicant name"],
+            "identity.pronouns": ["pronouns", "preferred pronouns", "gender pronouns"],
             "contact.email": ["email", "e-mail", "mail", "email address"],
             "contact.phone": ["phone", "tel", "mobile", "cell", "contact", "phone number"],
+            "contact.linkedin": ["linkedin", "linkedin url", "linkedin profile"],
+            "contact.github": ["github", "github profile", "github url"],
             "contact.portfolio": ["website", "url", "portfolio", "link", "personal website"],
             "contact.address": ["address", "street", "address line 1"],
             "contact.city": ["city", "town"],
             "contact.zip_code": ["zip", "postal", "code", "zip code"],
             "contact.state": ["state", "province", "region"],
-            "contact.country": ["country", "country format"],
-            "contact.linkedin": ["linkedin", "linkedin url", "linkedin profile"],
-            "contact.github": ["github", "github profile", "github url"],
+            "contact.country": ["country", "country format", "country/region", "location country"],
             "summary.short": ["summary", "about", "bio", "description"],
             "summary.professional_statement": ["describe your relevant experiences", "professional statement", "highlight your industrial projects", "research record", "relevant experiences", "industrial projects", "3-4 sentences", "highlight your projects", "highlight your industrial projects and research record"],
             "summary.motivation": ["multiple roles", "motivation for each", "order them", "apply to multiple roles", "explain your motivation"],
-            "employment.current_role": ["job title", "current role", "current title", "position title"],
-            "employment.current_company": ["company", "employer", "current company", "organization"],
+            "employment.current_role": ["job title", "current role", "current title", "position title", "role", "position"],
+            "employment.current_company": ["company", "employer", "current company", "organization", "company name"],
             "employment.years_total": ["total years of experience", "total years experience", "number of years", "years of relevant experience"],
             "employment.work_description": ["responsibilities", "work description", "job description", "summary", "description", "work highlights"],
             "employment.start_date": ["work start", "employment start", "job start", "start date"],
@@ -37,16 +40,27 @@ class GenericStrategy {
             "education_flat.start_date": ["education start", "edu start", "graduation date", "education start date"],
             "education_flat.end_date": ["education end", "edu end", "graduation date", "education end date"],
             "identity.gender": ["gender", "sex"],
-            "identity.ethnicity": ["ethnicity", "race", "hispanic"],
-            "identity.hispanic_latino": ["hispanic", "latino"],
-            "identity.veteran_status": ["veteran", "military"],
+            "identity.ethnicity": ["ethnicity", "race"],
+            "identity.hispanic_latino": ["hispanic", "latino", "hispanic or latino"],
+            "identity.veteran_status": ["veteran", "military", "protected veteran"],
             "identity.disability_status": ["disability", "handicap", "voluntary self-identification"],
-            "identity.sponsorship_required": ["sponsorship", "visa", "work authorization", "authorized to work", "need sponsorship", "legal right to work"],
+            "identity.sponsorship_required": ["sponsorship", "visa", "need sponsorship", "legal right to work", "require sponsorship for employment visa status", "require employment visa sponsorship", "now or will you in the future require"],
+            "identity.authorized_to_work": ["authorized to work", "legally authorized", "work authorization", "authorized to work in the united states", "eligible to work", "legal right to work"],
+            "identity.relocation_open": ["open to relocation", "willing to relocate", "relocate", "open to relocate"],
             "availability.start_date": ["start date", "availability", "soonest start", "available to start", "soonest", "soonest you can start"],
-            "summary.onsite_sunnyvale": ["sunnyvale", "on-site", "work on-site", "sunnyvale office", "location", "sunnyvale, ca office"]
+            "summary.onsite_sunnyvale": ["sunnyvale", "on-site", "work on-site", "sunnyvale office", "location", "sunnyvale, ca office"],
+            "summary.ai_tool_experience": ["claude", "cursor", "ai tool", "claude code"],
+            "identity.security_clearance_eligible": ["obtain and maintain", "government clearance", "security clearance", "u.s. government clearance", "requires u.s citizenship"]
         };
     }
 
+    getUSVariations() {
+        return ['us', 'usa', 'united states', 'united states of america', 'united states usa', 'us usa'];
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
     getNestedValue(obj, path) {
         if (!obj || !path) return null;
@@ -62,8 +76,13 @@ class GenericStrategy {
             const containerTxt = input.closest('div, fieldset')?.innerText?.toLowerCase() || "";
             const combinedTxt = labelTxt + " " + containerTxt + " " + (input.name || "").toLowerCase() + " " + (input.id || "").toLowerCase();
 
-            if (combinedTxt.includes("resume") || combinedTxt.includes("cv") || combinedTxt.includes("curriculum")) {
-                console.log("AutoFill: Attempting to attach resume to", input.name || input.id);
+            // Match resume keywords but EXCLUDE fields clearly marked for cover letters
+            const resumeKeywords = ["resume", "cv", "curriculum", "attach", "upload", "file", "document", "application"];
+            const isResumeField = resumeKeywords.some(kw => combinedTxt.includes(kw));
+            const isCoverLetterField = combinedTxt.includes("cover");
+
+            if (isResumeField && !isCoverLetterField) {
+                // console.log("AutoFill: Attempting to attach resume to", input.name || input.id);
 
                 try {
                     // Convert base64 Data URL to Blob
@@ -93,8 +112,100 @@ class GenericStrategy {
         });
     }
 
-    execute(normalizedData, aiEnabled, resumeFile = null) {
-        console.log("Executing GenericStrategy...");
+    handleInitialEntry() {
+        const entryPatterns = [
+            'apply', 'apply now', 'apply for this job', 'apply manually',
+            'fill manually', 'enter manually', 'start application', 'start'
+        ];
+
+        const selectors = [
+            'button:not([style*="display: none"])',
+            'a.btn',
+            'a[role="button"]',
+            '[role="button"]',
+            '[data-automation-id*="apply" i]',
+            '[data-automation-id*="Apply"]',
+            '[data-automation-id*="manual" i]',
+            'input[type="submit"]'
+        ];
+
+        const buttons = Array.from(document.querySelectorAll(selectors.join(', ')));
+
+        // Deduplicate buttons (in case they match multiple selectors)
+        const uniqueButtons = Array.from(new Set(buttons));
+
+        // Filter out hidden and disabled buttons, and sort by visibility
+        const visibleButtons = uniqueButtons.filter(b => {
+            return b.offsetParent !== null && !b.disabled;
+        }).sort((a, b) => {
+            // Prioritize buttons with higher z-index
+            const getZIndex = (el) => parseInt(window.getComputedStyle(el).zIndex || 0, 10);
+            return getZIndex(b) - getZIndex(a);
+        });
+
+        // console.log("AutoFill: handleInitialEntry found", visibleButtons.length, "visible buttons");
+
+        // Find the best candidate for an entry button
+        const entryBtn = visibleButtons.find(b => {
+            const text = (b.innerText || b.value || b.getAttribute('aria-label') || b.textContent || "").toLowerCase().trim();
+            const automationId = (b.getAttribute('data-automation-id') || "").toLowerCase();
+
+            // Priority 1: Clear "Apply Manually" indicators (to skip popups)
+            if (text.includes('apply manually') || text.includes('fill manually') || text.includes('enter manually')) {
+                // console.log("AutoFill: Matched 'manual' pattern");
+                return true;
+            }
+            if (automationId === 'applymanually' || automationId.includes('manual')) {
+                // console.log("AutoFill: Matched automation ID 'manual' pattern");
+                return true;
+            }
+
+            // Priority 2: Exact match for standard "Apply" buttons
+            if (entryPatterns.some(p => text === p)) {
+                // console.log("AutoFill: Matched exact text pattern:", text);
+                return true;
+            }
+
+            // Priority 3: Partial match
+            const matches = entryPatterns.some(p => text.includes(p));
+            if (matches) {
+                // console.log("AutoFill: Matched partial text pattern:", text);
+            }
+            return matches;
+        });
+
+        if (entryBtn) {
+            // console.log("AutoFill: Automatically clicking entry/popup button:", entryBtn.innerText || entryBtn.value || entryBtn.getAttribute('aria-label'));
+            // Ensure button is in view before clicking
+            entryBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => {
+                // console.log("AutoFill: Executing click on entry button");
+                entryBtn.click();
+            }, 200);
+            return true;
+        }
+
+        // console.log("AutoFill: No matching entry button found");
+        return false;
+    }
+
+    async execute(normalizedData, aiEnabled, resumeFile = null) {
+        // console.log("Executing GenericStrategy (Human-like speed)...");
+        // console.log("=== RESUME DATA AVAILABLE ===");
+        // console.log("  First Name:", normalizedData?.identity?.first_name);
+        // console.log("  Last Name:", normalizedData?.identity?.last_name);
+        // console.log("  Email:", normalizedData?.contact?.email);
+        // console.log("  Phone:", normalizedData?.contact?.phone);
+        // console.log("  Education entries:", normalizedData?.education?.length || 0);
+        // console.log("  Employment entries:", normalizedData?.employment?.history?.length || 0);
+        // console.log("============================");
+
+        // --- Handle Initial Entry (Popups or Apply buttons) ---
+        const entryClicked = this.handleInitialEntry();
+        if (entryClicked) {
+            // Give the DOM a moment to react if we clicked a popup
+            await this.sleep(1000);
+        }
 
         // --- Handle Resume Attachment ---
         if (resumeFile) {
@@ -135,7 +246,7 @@ class GenericStrategy {
                     });
 
                     if (addBtn) {
-                        console.log(`AutoFill: Clicking "Add" button for count ${containerCount} < ${section.data.length}`);
+                        // console.log(`AutoFill: Clicking "Add" button for count ${containerCount} < ${section.data.length}`);
                         addBtn.click();
                         // We click only once per execute cycle. 
                         // The MutationObserver in content.js will trigger execute() again if the DOM changes.
@@ -147,6 +258,21 @@ class GenericStrategy {
         handleAddButtons();
 
         const inputs = document.querySelectorAll('input, textarea, select');
+        // console.log("✓ Found", inputs.length, "form inputs on page");
+
+        // Log first few inputs for debugging
+        let fillCount = 0;
+        // console.log("=== FORM INPUTS ON PAGE ===");
+        Array.from(inputs).slice(0, 10).forEach((input, idx) => {
+            const type = input.type || input.tagName;
+            const name = input.name || input.id || '(unnamed)';
+            const value = input.value?.substring(0, 30) || '(empty)';
+            const hidden = input.getAttribute('type') === 'hidden' ? ' [HIDDEN]' : '';
+            const disabled = input.disabled ? ' [DISABLED]' : '';
+            // console.log(`  [${idx}] ${type} name="${name}" value="${value}"${hidden}${disabled}`);
+        });
+        // console.log("===========================");
+
 
         // This array will hold the report data for the side panel
         let fillReport = [];
@@ -155,14 +281,14 @@ class GenericStrategy {
         let educationGroupTracker = new Map();
         let employmentGroupTracker = new Map();
 
-        inputs.forEach(input => {
+        for (const input of inputs) {
             // Allow hidden fields if they have a name or id (likely state holders for custom dropdowns)
-            if (input.type === 'hidden' && !input.id && !input.name && !input.getAttribute('data-automation-id')) return;
-            if (input.disabled || input.readOnly) return;
+            if (input.type === 'hidden' && !input.id && !input.name && !input.getAttribute('data-automation-id')) continue;
+            if (input.disabled || input.readOnly) continue;
 
             // Skip inputs that are already filled — prevents re-triggering confidence popups
             // on second pass (e.g. from MutationObserver after initial fill)
-            if (input.value && input.value.trim() !== '') return;
+            if (input.value && input.value.trim() !== '') continue;
 
             // Skip Select2-hidden selects — they are enhanced custom dropdowns whose visual
             // layer is controlled by Select2/jQuery. Setting their value directly won't update
@@ -171,15 +297,24 @@ class GenericStrategy {
                 input.tagName === 'SELECT' &&
                 (input.classList.contains('select2-hidden-accessible') ||
                     input.getAttribute('aria-hidden') === 'true' && input.style.display === 'none')
-            ) return;
+            ) continue;
 
             // Handle Radio/Checkbox
             if (input.type === 'radio' || input.type === 'checkbox') {
                 this.handleRadioCheckbox(input, normalizedData);
-                return;
+                continue;
             }
 
             let match = this.findValueForInput(input, normalizedData);
+
+            // SPECIAL CASE: If we matched 'middle_name' but value is empty, 
+            // DO NOT let it fall back or re-match to 'full_name' later.
+            if (match && match.fieldKey === 'identity.middle_name' && !match.value) {
+                // This prevents the full_name fallback for middle name fields
+                match = null;
+                // However, we want to skip filling it with anything else
+                continue;
+            }
 
             // --- Multi-Entry Grouping Logic (Education & Employment) ---
             if (match && match.fieldKey) {
@@ -220,8 +355,8 @@ class GenericStrategy {
                         // 3. Proximity Fallback
                         if (bestIdx === -1) {
                             const tracker = isEdu ? educationGroupTracker : employmentGroupTracker;
-                            const selector = isEdu ? '.education-entry, fieldset' : '.work-entry, .experience-entry, fieldset';
-                            const container = input.closest(`${selector}, div[id*="edu"], div[id*="work"]`);
+                            const selector = isEdu ? '.education-entry, fieldset, .school-entry' : '.work-entry, .experience-entry, fieldset, .employment-entry, .job-entry';
+                            const container = input.closest(`${selector}, div[id*="edu"], div[id*="work"], div[id*="employment"], section[id*="experience"]`);
 
                             const containers = Array.from(document.querySelectorAll(selector));
                             let groupId = container ? containers.indexOf(container) : "global";
@@ -242,7 +377,11 @@ class GenericStrategy {
                                     'end_date': 'endDate'
                                 };
                                 const targetKey = eduKeyMap[subKey] || subKey;
-                                match.value = sourceData[bestIdx][targetKey] || sourceData[bestIdx][subKey] || sourceData[bestIdx].degree || "";
+                                match.value = sourceData[bestIdx][targetKey] ||
+                                    sourceData[bestIdx][subKey] ||
+                                    sourceData[bestIdx].degree ||
+                                    sourceData[bestIdx].major ||
+                                    "";
                             } else {
                                 const empKeyMap = {
                                     'current_role': 'position',
@@ -252,62 +391,75 @@ class GenericStrategy {
                                     'end_date': 'endDate'
                                 };
                                 const targetKey = empKeyMap[subKey] || subKey;
-                                match.value = sourceData[bestIdx][targetKey] || "";
+                                // Expand lookup to common keys
+                                match.value = sourceData[bestIdx][targetKey] ||
+                                    sourceData[bestIdx][subKey] ||
+                                    sourceData[bestIdx].company ||
+                                    sourceData[bestIdx].title ||
+                                    "";
                             }
                             match.confidence = 95;
                         }
                     }
                 }
-            }
 
 
 
-            let status = 'unmatched';
-            let finalValue = '';
+                let status = 'unmatched';
+                let finalValue = '';
 
-            if (match && match.value) {
-                // Silent skip: if confidence is too low, don't fill AND don't show a popup
-                const SILENT_SKIP_THRESHOLD = 40;
-                if (match.confidence < SILENT_SKIP_THRESHOLD) {
-                    // Too low to be useful — ignore silently
-                } else if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
-                    this.setInputValue(input, match.value, 'green');
-                    status = 'filled';
-                    finalValue = match.value;
+                if (match && match.value) {
+                    // Silent skip: if confidence is too low, don't fill AND don't show a popup
+                    const SILENT_SKIP_THRESHOLD = 40;
+                    if (match.confidence < SILENT_SKIP_THRESHOLD) {
+                        // Too low to be useful — ignore silently
+                    } else if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
+                        // console.log(`  ✓ Filling: ${input.name || input.id || '?'} = "${match.value?.substring(0, 40)}..."`);
+                        this.setInputValue(input, match.value, 'green');
+                        status = 'filled';
+                        finalValue = match.value;
+                        fillCount++;
+                    } else {
+                        // console.log(`  ⚠ Low confidence (${match.confidence}%): ${input.name || input.id || '?'} = "${match.value?.substring(0, 40)}..."`);
+                        this.promptUserConfirmation(input, match.value, match.confidence);
+                        status = 'low_confidence';
+                        finalValue = match.value; // It is suggested, though not explicitly set yet
+                    }
                 } else {
-                    this.promptUserConfirmation(input, match.value, match.confidence);
-                    status = 'low_confidence';
-                    finalValue = match.value; // It is suggested, though not explicitly set yet
+                    // Check if it's a required field that was missed
+                    if (input.required || input.getAttribute('aria-required') === 'true') {
+                        this.highlightUnmatchedRequired(input);
+                        status = 'unmatched_required';
+                    }
                 }
-            } else {
-                // Check if it's a required field that was missed
-                if (input.required || input.getAttribute('aria-required') === 'true') {
-                    this.highlightUnmatchedRequired(input);
-                    status = 'unmatched_required';
+
+                // Only add to report if it's an actionable or matched field
+                if (status !== 'unmatched') {
+                    const labelText = this.getLabelText(input) || input.name || input.id || input.placeholder || "Unknown Field";
+                    fillReport.push({
+                        id: input.id || input.name || Math.random().toString(36).substr(2, 9),
+                        label: labelText,
+                        value: finalValue,
+                        confidence: match ? match.confidence : 0,
+                        status: status
+                    });
+                }
+
+                // --- Human-like Delay ---
+                // Randomized delay between 200ms and 700ms to mimic typing/moving between fields
+                if (status === 'filled') {
+                    await this.sleep(Math.floor(Math.random() * 500) + 200);
                 }
             }
 
-            // Only add to report if it's an actionable or matched field
-            if (status !== 'unmatched') {
-                const labelText = this.getLabelText(input) || input.name || input.id || input.placeholder || "Unknown Field";
-                fillReport.push({
-                    id: input.id || input.name || Math.random().toString(36).substr(2, 9),
-                    label: labelText,
-                    value: finalValue,
-                    confidence: match ? match.confidence : 0,
-                    status: status
-                });
-            }
-        });
 
+            // Send the fill report to the sidepanel
+            chrome.runtime.sendMessage({
+                action: 'fill_report',
+                report: fillReport
+            });
 
-        // Send the fill report to the sidepanel
-        chrome.runtime.sendMessage({
-            action: 'fill_report',
-            report: fillReport
-        });
-
-        console.log('AutoFill attempt complete.');
+        }
     }
 
     findCustomAnswer(input, hostname, customAtsAnswers) {
@@ -381,6 +533,14 @@ class GenericStrategy {
         });
         keywordScore = Math.min(keywordScore, 70);
 
+        // Negative weight: if this is a Full Name attempt but field has "middle", penalize heavily
+        if (fieldKey === "identity.full_name") {
+            const combinedTxt = `${features.name_attr} ${features.id_attr} ${features.label_text}`.toLowerCase();
+            if (combinedTxt.includes("middle")) {
+                keywordScore -= 50;
+            }
+        }
+
         let contextScore = 0;
         keywords.forEach(keyword => {
             if (features.nearby_text && features.nearby_text.includes(keyword.toLowerCase())) {
@@ -410,6 +570,11 @@ class GenericStrategy {
 
     findValueForInput(input, normalizedData) {
         const features = this.extractFeatures(input);
+
+        // Debug logging for every field being checked
+        const fieldName = input.name || input.id || '(unnamed)';
+        const fieldLabel = this.getLabelText(input) || '(no label)';
+        // console.log(`    [Checking] ${fieldName} | Label: "${fieldLabel}"`);
 
         // --- 1. Attempt Domain-Specific Dynamic Reverse Lookups ---
         // Guard: skip this if the label matches a professional statement question.
@@ -465,6 +630,7 @@ class GenericStrategy {
 
         // Fast-path: if this is clearly a professional statement field, return it directly
         if (isProfessionalStatementField && normalizedData.summary?.professional_statement) {
+            // console.log(`      ✓ MATCHED (Professional Statement): "${normalizedData.summary.professional_statement.substring(0, 50)}..."`);
             return {
                 value: normalizedData.summary.professional_statement,
                 confidence: 100,
@@ -474,6 +640,7 @@ class GenericStrategy {
 
         // Fast-path: if this is clearly a motivation/multiple-roles field, return it directly
         if (isMotivationField && normalizedData.summary?.motivation) {
+            // console.log(`      ✓ MATCHED (Motivation): "${normalizedData.summary.motivation.substring(0, 50)}..."`);
             return {
                 value: normalizedData.summary.motivation,
                 confidence: 100,
@@ -492,11 +659,43 @@ class GenericStrategy {
 
                 if (value) {
                     bestMatch = { value, confidence, fieldKey };
+                    // console.log(`      → Candidate: ${fieldKey} (confidence: ${confidence}%) = "${String(value).substring(0, 40)}..."`);
                 }
             }
         }
 
-        return bestMatch.confidence > 0 ? bestMatch : null;
+        if (bestMatch.confidence > 0) {
+            // console.log(`      ✓ SELECTED: ${bestMatch.fieldKey} (${bestMatch.confidence}%)`);
+            return bestMatch;
+        } else {
+            // --- Custom Hardcoded Fallbacks for High-Confidence Questions ---
+            if (features.normalized_combined.includes("government clearance") ||
+                (features.normalized_combined.includes("obtain") && features.normalized_combined.includes("maintain") && features.normalized_combined.includes("clearance"))) {
+                // console.log(`      ✓ MATCHED (Hardcoded Security Clearance Fallback): "Yes"`);
+                return { value: "Yes", confidence: 95, fieldKey: "identity.security_clearance_eligible" };
+            }
+
+            // Fallback for Authorized to Work (Default: Yes)
+            if (features.normalized_combined.includes("authorized") && features.normalized_combined.includes("work")) {
+                // console.log(`      ✓ MATCHED (Hardcoded Authorized to Work Fallback): "Yes"`);
+                return { value: "Yes", confidence: 90, fieldKey: "identity.authorized_to_work" };
+            }
+
+            // Fallback for Sponsorship (Default: No)
+            if (features.normalized_combined.includes("sponsorship") || features.normalized_combined.includes("visa")) {
+                // console.log(`      ✓ MATCHED (Hardcoded Sponsorship Fallback): "No"`);
+                return { value: "No", confidence: 90, fieldKey: "identity.sponsorship_required" };
+            }
+
+            // Fallback for Relocation (Default: Yes)
+            if (features.normalized_combined.includes("relocation") || features.normalized_combined.includes("relocate")) {
+                // console.log(`      ✓ MATCHED (Hardcoded Relocation Fallback): "Yes"`);
+                return { value: "Yes", confidence: 85, fieldKey: "identity.relocation_open" };
+            }
+
+            // console.log(`      ✗ NO MATCH FOUND`);
+            return null;
+        }
     }
 
     /**
@@ -515,8 +714,13 @@ class GenericStrategy {
                 labelText.includes(val) ||
                 (val === 'yes' && (labelText === 'yes' || labelText === 'y')) ||
                 (val === 'no' && (labelText === 'no' || labelText === 'n')) ||
-                (val.includes('not a protected veteran') && labelText.includes('not a protected veteran')) ||
-                (val.includes('no, i do not have a disability') && labelText.includes('no, i do not have a disability'));
+                (val === 'male' && labelText === 'male') ||
+                (val === 'female' && labelText === 'female') ||
+                (val === 'non-binary' && labelText.includes('non-binary')) ||
+                ((val === 'no' || val === 'not_a_veteran') && (labelText.includes('not a protected veteran') || labelText.includes('no, i am not'))) ||
+                ((val === 'no' || val === 'no_disability') && (labelText.includes('no, i do not have a disability') || labelText.includes('no, i don\'t'))) ||
+                (val.includes('he/him') && labelText.includes('he/him')) ||
+                (val.includes('she/her') && labelText.includes('she/her'));
 
             if (isPositiveMatch) {
                 input.checked = true;
@@ -631,6 +835,10 @@ class GenericStrategy {
         const normalize = (s) => String(s).toLowerCase().replace(/[^\w\s]/g, '').trim();
         const val = normalize(value);
 
+        // --- US Variation Equivalence ---
+        const usVariations = this.getUSVariations();
+        const isUSValue = usVariations.includes(val);
+
         let bestOptionIndex = -1;
         let highestConfidence = 0;
 
@@ -646,14 +854,42 @@ class GenericStrategy {
                 break;
             }
 
-            // 2. Starts with (90)
+            // 2. Compliance Equivalence (e.g., "no" matches "I don't have a disability")
+            if (val === 'no' && (optText.includes("not a protected veteran") || optText.includes("do not have a disability") || optText === 'no' || optText === 'n')) {
+                if (98 > highestConfidence) { bestOptionIndex = i; highestConfidence = 98; }
+            }
+            if (val === 'yes' && (optText === 'yes' || optText === 'y' || optText === 'true' || optText.includes("i am a protected veteran"))) {
+                if (98 > highestConfidence) { bestOptionIndex = i; highestConfidence = 98; }
+            }
+            if ((val === 'male' || val === 'female') && optText === val) {
+                if (99 > highestConfidence) { bestOptionIndex = i; highestConfidence = 99; }
+            }
+
+            // 3. US Variation Equivalence (95)
+            if (isUSValue && (usVariations.includes(optVal) || usVariations.includes(optText))) {
+                if (95 > highestConfidence) {
+                    bestOptionIndex = i;
+                    highestConfidence = 95;
+                }
+            }
+
+            // 3. Dialing Code Matching (92)
+            // If the value is "United States" and option contains "+1", or vice versa
+            if (isUSValue && (optText.includes('1') || optVal.includes('1')) && (optText.includes('+') || optVal.includes('+'))) {
+                if (92 > highestConfidence) {
+                    bestOptionIndex = i;
+                    highestConfidence = 92;
+                }
+            }
+
+            // 4. Starts with (90)
             if (optText.startsWith(val) || val.startsWith(optText)) {
                 if (90 > highestConfidence) {
                     bestOptionIndex = i;
                     highestConfidence = 90;
                 }
             }
-            // 3. Includes (70)
+            // 5. Includes (70)
             else if (optText.includes(val) || val.includes(optText)) {
                 if (70 > highestConfidence) {
                     bestOptionIndex = i;
@@ -664,6 +900,10 @@ class GenericStrategy {
 
         if (bestOptionIndex !== -1) {
             select.selectedIndex = bestOptionIndex;
+            // Trigger events
+            ['change', 'input', 'blur'].forEach(ev => {
+                select.dispatchEvent(new Event(ev, { bubbles: true }));
+            });
         } else {
             // Fallback: try setting value directly
             select.value = value;
@@ -750,7 +990,99 @@ class GenericStrategy {
             cleanup();
         });
     }
+
+    /**
+     * Attempts to automatically submit the form by finding and clicking a Submit/Next button.
+     */
+    autoSubmit() {
+        // Prioritize buttons that clearly indicate submission/progression
+        // Start with "Next" and "Continue" which are less ambiguous than "Apply"
+        const submitPatterns = [
+            'submit application', 'submit', 'send application', 'finish',
+            'next', 'continue', 'save and continue', 'next step', 'go to next step',
+            'apply now', 'apply', 'apply for'
+        ];
+
+        // Look for typical submit buttons
+        const buttons = Array.from(document.querySelectorAll('button[type="submit"], button, input[type="submit"], a.btn, a[role="button"], span.btn, .button, .btn'));
+
+        // Filter and sort: prioritize buttons that are clearly submission buttons
+        const eligibleButtons = buttons.filter(btn => {
+            // Skip visually hidden or disabled buttons
+            if (btn.disabled || btn.offsetParent === null) return false;
+
+            const text = (btn.innerText || btn.value || btn.getAttribute('aria-label') || "").toLowerCase().trim();
+
+            // Skip empty buttons
+            if (!text) return false;
+
+            // Skip very short buttons (likely icons or minor controls)
+            if (text.length < 2) return false;
+
+            // Match against submit patterns
+            return submitPatterns.some(p => text === p || text.startsWith(p));
+        });
+
+        // Prioritize by pattern strength
+        eligibleButtons.sort((a, b) => {
+            const textA = (a.innerText || a.value || a.getAttribute('aria-label') || "").toLowerCase().trim();
+            const textB = (b.innerText || b.value || b.getAttribute('aria-label') || "").toLowerCase().trim();
+
+            // Score buttons based on how specific their text is
+            const score = (text) => {
+                if (text === 'submit application') return 100;
+                if (text === 'submit') return 95;
+                if (text === 'send application') return 92;
+                if (text === 'finish') return 90;
+                if (text === 'next') return 80;
+                if (text === 'continue') return 75;
+                if (text === 'save and continue') return 72;
+                if (text === 'next step') return 70;
+                if (text.includes('apply') && text.includes('now')) return 60;
+                if (text.includes('apply') && text.includes('for')) return 55;
+                return 0;
+            };
+
+            // Boost buttons with type="submit"
+            let scoreA = score(textA);
+            let scoreB = score(textB);
+
+            if (a.getAttribute('type') === 'submit') scoreA += 10;
+            if (b.getAttribute('type') === 'submit') scoreB += 10;
+
+            return scoreB - scoreA;
+        });
+
+        if (eligibleButtons.length > 0) {
+            const btn = eligibleButtons[0];
+            const text = (btn.innerText || btn.value || btn.getAttribute('aria-label') || "").toLowerCase().trim();
+            // console.log(`AutoFill: Found auto-submit button: "${text}" (score-based selection)`);
+
+            // Fast-track: Some forms have a required consent checkbox right before submission that was missed
+            const requiredCheckboxes = document.querySelectorAll('input[type="checkbox"][required], input[type="checkbox"][aria-required="true"]');
+            requiredCheckboxes.forEach(cb => {
+                if (!cb.checked) {
+                    // console.log("AutoFill: Auto-checking missed required checkbox before submit");
+                    cb.checked = true;
+                    ['change', 'input', 'click'].forEach(e => cb.dispatchEvent(new Event(e, { bubbles: true })));
+                }
+            });
+
+            // Score the text to see if we believe this was a final SUBMIT button
+            const finalScore = score(text);
+
+            // Execute the click
+            btn.click();
+
+            // Return true if it was likely a final submission (score >= 90)
+            return finalScore >= 90;
+        }
+
+        // console.log("AutoFill: Could not find a clear submit button.");
+        return false;
+    }
 }
+
 
 // Global exposure
 if (typeof window !== 'undefined') {

@@ -9,7 +9,7 @@ class TaleoStrategy extends GenericStrategy {
     }
 
     execute(normalizedData, aiEnabled) {
-        console.log("Executing TaleoStrategy...");
+        // console.log("Executing TaleoStrategy...");
         
         // Basic fallback execution. Override findValueForInput if specific DOM structures are known.
         super.execute(normalizedData, aiEnabled);

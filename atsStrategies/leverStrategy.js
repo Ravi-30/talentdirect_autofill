@@ -8,33 +8,16 @@ class LeverStrategy extends GenericStrategy {
         this.CONFIDENCE_THRESHOLD = 65; // Slightly lower threshold for Lever
     }
 
-    execute(normalizedData, aiEnabled) {
-        console.log("Executing LeverStrategy...");
+    async execute(normalizedData, aiEnabled, resumeFile = null) {
+        // console.log("Executing LeverStrategy (Human-like speed)...");
+        await super.execute(normalizedData, aiEnabled, resumeFile);
+        // console.log('Lever AutoFill complete!');
+    }
 
-        const inputs = document.querySelectorAll('input, select, textarea');
-
-        inputs.forEach(input => {
-            if (input.type === 'hidden' && !input.id && !input.name) return;
-            if (input.disabled || input.readOnly) return;
-
-            let match = this.findLeverSpecificMatch(input, normalizedData);
-
-            if (!match || !match.value) {
-                match = this.findValueForInput(input, normalizedData);
-            }
-
-            if (match && match.value) {
-                if (match.confidence >= this.CONFIDENCE_THRESHOLD) {
-                    this.setInputValue(input, match.value);
-                } else {
-                    this.promptUserConfirmation(input, match.value, match.confidence);
-                }
-            } else if (aiEnabled) {
-                console.log("AI Enabled: Would attempt to fill unmatched field", input.name || input.id);
-            }
-        });
-
-        alert('Lever AutoFill complete! Please review the form.');
+    findValueForInput(input, normalizedData) {
+        let match = this.findLeverSpecificMatch(input, normalizedData);
+        if (match && match.value) return match;
+        return super.findValueForInput(input, normalizedData);
     }
 
     findLeverSpecificMatch(input, data) {

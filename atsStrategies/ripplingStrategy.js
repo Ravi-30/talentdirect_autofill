@@ -9,7 +9,7 @@ class RipplingStrategy extends GenericStrategy {
     }
 
     execute(normalizedData, aiEnabled) {
-        console.log("Executing RipplingStrategy...");
+        // console.log("Executing RipplingStrategy...");
         
         // Basic fallback execution. Override findValueForInput if specific DOM structures are known.
         super.execute(normalizedData, aiEnabled);

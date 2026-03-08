@@ -9,7 +9,7 @@ class TeamtailorStrategy extends GenericStrategy {
     }
 
     execute(normalizedData, aiEnabled) {
-        console.log("Executing TeamtailorStrategy...");
+        // console.log("Executing TeamtailorStrategy...");
         
         // Basic fallback execution. Override findValueForInput if specific DOM structures are known.
         super.execute(normalizedData, aiEnabled);
